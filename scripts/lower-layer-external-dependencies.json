@@ -64,6 +64,9 @@
       "serde",
       "thiserror"
     ],
+    "lissio-device-profile": [
+      "thiserror"
+    ],
     "lissio-device-tree": [
       "async-trait",
       "log",
