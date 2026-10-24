@@ -37,7 +37,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const CONTRACT_TAG = 'device-contracts-v2';
+export const CONTRACT_TAG = 'device-contracts-v3';
 export const MANIFEST_VERSION = 1;
 export const MANIFEST_PATH = 'docs/architecture/device-contracts.lock.json';
 
