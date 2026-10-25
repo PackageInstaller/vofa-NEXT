@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "tag": "device-contracts-v4",
+  "tag": "device-contracts-v5",
   "files": [
     {
       "path": "server/core/crates/shared/data-model/src/ids.rs",
@@ -109,7 +109,7 @@
     },
     {
       "path": "server/physical/crates/protocol/acquisition/src/interface.rs",
-      "sha256": "790ef2dfd26e484b6c91604f27df8732cdd9a49880ca1fdc3753e577d08fceb0",
+      "sha256": "d1402c6298fd47e442effe1061c7185e6c6865ef8892886b5fcb3ad92e03bc5d",
       "owner": "W0a"
     },
     {
