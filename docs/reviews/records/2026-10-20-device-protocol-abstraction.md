@@ -99,7 +99,7 @@ A protocol is described by `ProtocolConfig`, `SchemaPreset`,
 `ProtocolSchema.preset_config`, `ProtocolNodeConfig`, `NodeKind::Protocol`, and a
 frontend kind list. Dispatch is written three times:
 `schema_from_protocol_config`, `compile_preset`
-([`schema/src/compile.rs:14-44`](../../../server/core/crates/protocol/schema/src/compile.rs)),
+(`schema/src/compile.rs:14-44`, removed with the crate),
 and `create_protocol_engine`
 ([`protocol_node_state.rs:15-28`](../../../server/crates/desktop/pipeline/src/data_plane/protocol_node_state.rs));
 the catalog adds a fourth list in
@@ -141,7 +141,7 @@ protocol.
 ### Cross-cutting duplication
 
 - `SchemaEngine::try_parse` is a single 250-line match over every block kind
-  ([`engine.rs:74-325`](../../../server/core/crates/protocol/schema/src/engine.rs)),
+  (`engine.rs:74-325`, removed with the crate),
   and `frame-decoder` parses the same block definitions a second time — the debt
   the cleanup register already records as open.
 - `ByteDeviceFactory::config_schema` builds a JSON Schema by sniffing parameter
