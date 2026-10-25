@@ -27,7 +27,8 @@
       "libautomotive",
       "parking_lot",
       "serde",
-      "serde_json"
+      "serde_json",
+      "tokio"
     ],
     "lissio-block-codec": [
       "ciborium"
