@@ -16,7 +16,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, mkdtempSync } from 'node:fs';
-import { basename, join, relative } from 'node:path';
+import { basename, join, relative, sep } from 'node:path';
 // import.meta.dirname is a platform-native path; on Windows new URL(...).pathname yields
 // a "/C:/..." form that existsSync treats as missing, making this check always fail there
 const root = join(import.meta.dirname, '..');
@@ -137,6 +137,84 @@ function declaresType(source, name) {
   return declaration.test(stripComments(source));
 }
 
+/**
+ * Compare one hand-written mirror against the Rust struct it shadows.
+ *
+ * Returns a human-readable drift description, or null when the field sets match. The
+ * motivating bug: `PipelineConfig` gained `eval_simd` on the Rust side while the TS mirror
+ * kept the old field list, so every settings push omitted the flag and `#[serde(default)]`
+ * turned SIMD back on. A missing field is therefore never benign for a `serde(default)`
+ * struct, which is why this is an error rather than a warning.
+ */
+export function mirrorFieldDrift(name, tsFields, rustFields) {
+  const missing = [...rustFields].filter((field) => !tsFields.has(field)).sort();
+  const extra = [...tsFields].filter((field) => !rustFields.has(field)).sort();
+  if (missing.length === 0 && extra.length === 0) return null;
+  return (
+    `${name} with a different field set` +
+    `${missing.length > 0 ? `; missing ${missing.join(', ')}` : ''}` +
+    `${extra.length > 0 ? `; not on the Rust side ${extra.join(', ')}` : ''}`
+  );
+}
+
+/**
+ * Hand-maintained frontend mirrors that shadow a Rust struct of the same name.
+ *
+ * `client/src/lib/tauri/tauriTypes.ts` is written by hand (it is not generated), so the
+ * byte-for-byte check above cannot see it drift. Match each declared interface to a
+ * same-named Rust struct and compare field sets; a struct that does not exist, or a name
+ * declared more than once on the Rust side, is skipped rather than guessed at.
+ */
+function findMirrorDrift() {
+  const drift = [];
+  const mirrors = [
+    { file: join(root, 'client', 'src', 'lib', 'tauri', 'tauriTypes.ts'), rel: 'client/src/lib/tauri/tauriTypes.ts' },
+  ];
+  const workspaceRoots = ['server', 'server/core', 'server/physical', 'server/data'].map((prefix) =>
+    join(root, prefix, 'crates'),
+  );
+
+  /** name -> Set(field names), only for names declared exactly once. */
+  const rustStructs = new Map();
+  const ambiguous = new Set();
+  for (const cratesDir of workspaceRoots) {
+    if (!existsSync(cratesDir)) continue;
+    for (const entry of readdirSync(cratesDir, { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.rs')) continue;
+      const absolute = join(entry.parentPath ?? cratesDir, entry.name);
+      if (absolute.includes(`${sep}target${sep}`) || entry.name.endsWith('_tests.rs')) continue;
+      const source = readFileSync(absolute, 'utf8');
+      for (const match of source.matchAll(/pub struct\s+(\w+)\s*\{([\s\S]*?)\n\}/g)) {
+        const [, name, body] = match;
+        const fields = new Set(
+          [...body.matchAll(/^\s*pub\s+(\w+)\s*:/gm)].map((field) => field[1]),
+        );
+        if (fields.size === 0) continue;
+        if (rustStructs.has(name)) {
+          ambiguous.add(name);
+        } else {
+          rustStructs.set(name, fields);
+        }
+      }
+    }
+  }
+
+  for (const { file, rel } of mirrors) {
+    if (!existsSync(file)) continue;
+    const source = readFileSync(file, 'utf8');
+    for (const match of source.matchAll(/export interface\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
+      const [, name, body] = match;
+      if (ambiguous.has(name) || !rustStructs.has(name)) continue;
+      const tsFields = new Set(
+        [...body.matchAll(/^\s{2}([A-Za-z_]\w*)\??\s*:/gm)].map((field) => field[1]),
+      );
+      const message = mirrorFieldDrift(name, tsFields, rustStructs.get(name));
+      if (message) drift.push(`${rel} mirrors Rust struct ${message}`);
+    }
+  }
+  return drift;
+}
+
 const committed = snapshot(committedDir);
 const generated = snapshot(tempDir);
 const problems = [];
@@ -175,6 +253,13 @@ for (const [name, outputPath] of frameNames) {
     }
   }
 }
+
+// Hand-maintained mirrors: `client/src/lib/tauri/tauriTypes.ts` declares interfaces that
+// shadow Rust structs which are NOT part of the generated set (`checked below`). Because they
+// are hand-written, nothing above can see them drift — `PipelineConfig` silently lost
+// `eval_simd`, and every settings push re-enabled SIMD through `#[serde(default)]`.
+// Match a mirror to a same-named Rust struct and require an identical field set.
+problems.push(...findMirrorDrift());
 
 rmSync(tempDir, { recursive: true, force: true });
 

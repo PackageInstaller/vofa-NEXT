@@ -144,6 +144,11 @@
     "lissio-measurement": [
       "serde"
     ],
+    "lissio-node-document": [
+      "serde",
+      "serde_json",
+      "ts-rs"
+    ],
     "lissio-pipeline": [
       "log",
       "parking_lot",
