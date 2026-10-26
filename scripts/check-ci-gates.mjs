@@ -339,6 +339,10 @@ const FULL_ONLY_GATES = new Map([
   ['e2e', 'the browser suite starts a real backend and a Vite server'],
   ['perf-check', 'the render-budget probe drives a real browser and is timing-sensitive'],
   ['cargo-deny', 'the advisory/license audit needs a writable advisory cache and is slow'],
+  [
+    'check-coverage',
+    'an instrumented run of the frontend suite and the Rust workspaces costs several minutes, so it runs in the complete flow with the reports kept as artifacts',
+  ],
 ]);
 for (const gate of GATES) {
   // An informational entry cannot fail, so its tier cannot weaken a merge gate.

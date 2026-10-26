@@ -1,0 +1,3196 @@
+{
+  "total": {
+    "frontend:lines": 57.34,
+    "frontend:branches": 48.22,
+    "frontend:functions": 49.98,
+    "frontend:statements": 55.3
+  },
+  "files": {
+    "client/src/App.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/AboutModal.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/BackendConnectionGate.tsx": {
+      "lines": 12.14,
+      "branches": 10.97,
+      "functions": 21.42,
+      "statements": 13.83
+    },
+    "client/src/components/BackupModal.tsx": {
+      "lines": 42.1,
+      "branches": 16.66,
+      "functions": 31.25,
+      "statements": 40.42
+    },
+    "client/src/components/CodeEditor.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/CustomWidgetEditor.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/CustomWidgetEditorContainer.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/CustomWidgetHelpModal.tsx": {
+      "lines": 0,
+      "branches": 100,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/KeychainPermissionDialog.tsx": {
+      "lines": 81.81,
+      "branches": 87.5,
+      "functions": 80,
+      "statements": 87.5
+    },
+    "client/src/components/NotificationToasts.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/OrcaRouterPromo.tsx": {
+      "lines": 50,
+      "branches": 100,
+      "functions": 50,
+      "statements": 60
+    },
+    "client/src/components/SettingsControl.tsx": {
+      "lines": 55.88,
+      "branches": 34.61,
+      "functions": 47.36,
+      "statements": 55
+    },
+    "client/src/components/SettingsModal.tsx": {
+      "lines": 65,
+      "branches": 65.62,
+      "functions": 67.24,
+      "statements": 69.69
+    },
+    "client/src/components/SettingsSidebarSections.tsx": {
+      "lines": 66.66,
+      "branches": 100,
+      "functions": 62.5,
+      "statements": 72.72
+    },
+    "client/src/components/ThemeEditor.tsx": {
+      "lines": 67.74,
+      "branches": 45.16,
+      "functions": 65.78,
+      "statements": 64.13
+    },
+    "client/src/components/ThemeEditorColorPanel.tsx": {
+      "lines": 80.76,
+      "branches": 67.74,
+      "functions": 76.92,
+      "statements": 75
+    },
+    "client/src/components/ThemeEditorCssPanel.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/UpdateChannelDialog.tsx": {
+      "lines": 44.44,
+      "branches": 25,
+      "functions": 40,
+      "statements": 45.45
+    },
+    "client/src/components/UpdateDialog.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/settingFields.ts": {
+      "lines": 66.66,
+      "branches": 25,
+      "functions": 60,
+      "statements": 71.42
+    },
+    "client/src/components/settingsCategories.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/acquisition/AcquisitionProperties.tsx": {
+      "lines": 71.15,
+      "branches": 62.79,
+      "functions": 69.23,
+      "statements": 66.66
+    },
+    "client/src/components/acquisition/DevicePanel.tsx": {
+      "lines": 78.94,
+      "branches": 78.43,
+      "functions": 71.42,
+      "statements": 75
+    },
+    "client/src/components/acquisition/DeviceTreeInspector.tsx": {
+      "lines": 36.95,
+      "branches": 37.2,
+      "functions": 21.73,
+      "statements": 33.33
+    },
+    "client/src/components/acquisition/DeviceTreePanel.tsx": {
+      "lines": 65.76,
+      "branches": 56.88,
+      "functions": 60,
+      "statements": 63.22
+    },
+    "client/src/components/acquisition/DiscoveredEndpointList.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/acquisition/ModelGuidance.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/acquisition/SchemaFieldRow.tsx": {
+      "lines": 93.87,
+      "branches": 87.5,
+      "functions": 89.47,
+      "statements": 95
+    },
+    "client/src/components/acquisition/SchemaFields.tsx": {
+      "lines": 87.5,
+      "branches": 80.35,
+      "functions": 54.54,
+      "statements": 84.31
+    },
+    "client/src/components/acquisition/SchemaIssueList.tsx": {
+      "lines": 83.33,
+      "branches": 84.61,
+      "functions": 100,
+      "statements": 84.61
+    },
+    "client/src/components/acquisition/SchemaObjectFields.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/acquisition/SimulationNodeFields.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/acquisition/SimulationProperties.tsx": {
+      "lines": 68.96,
+      "branches": 54.54,
+      "functions": 40,
+      "statements": 56
+    },
+    "client/src/components/acquisition/devicePanelModel.ts": {
+      "lines": 100,
+      "branches": 85.71,
+      "functions": 100,
+      "statements": 93.33
+    },
+    "client/src/components/acquisition/discoveredEndpoints.ts": {
+      "lines": 92.59,
+      "branches": 89.47,
+      "functions": 100,
+      "statements": 90.32
+    },
+    "client/src/components/acquisition/schemaLabels.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/acquisition/useDeviceDiscovery.ts": {
+      "lines": 100,
+      "branches": 90,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/ai/AiChatPanel.tsx": {
+      "lines": 49.61,
+      "branches": 44.26,
+      "functions": 39.13,
+      "statements": 47.46
+    },
+    "client/src/components/ai/AiMarkdown.tsx": {
+      "lines": 71.05,
+      "branches": 61.53,
+      "functions": 60.86,
+      "statements": 70.45
+    },
+    "client/src/components/ai/AiMcpSettings.tsx": {
+      "lines": 55.81,
+      "branches": 64,
+      "functions": 30,
+      "statements": 57.77
+    },
+    "client/src/components/ai/AiSettingsSections.tsx": {
+      "lines": 69.23,
+      "branches": 100,
+      "functions": 66.66,
+      "statements": 73.33
+    },
+    "client/src/components/ai/AiTurnProcess.tsx": {
+      "lines": 87.5,
+      "branches": 78.33,
+      "functions": 94.11,
+      "statements": 87.09
+    },
+    "client/src/components/ai/AiTurnTimeline.tsx": {
+      "lines": 100,
+      "branches": 94.44,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/ai/AssistantBubble.tsx": {
+      "lines": 7.69,
+      "branches": 0,
+      "functions": 0,
+      "statements": 6.25
+    },
+    "client/src/components/ai/SessionMenu.tsx": {
+      "lines": 34.37,
+      "branches": 30.76,
+      "functions": 26.31,
+      "statements": 34.14
+    },
+    "client/src/components/brand/LissajousMark.tsx": {
+      "lines": 100,
+      "branches": 95.83,
+      "functions": 100,
+      "statements": 98.33
+    },
+    "client/src/components/common/DroppedInfoPopover.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/can/CanFrameList.tsx": {
+      "lines": 57.41,
+      "branches": 49.05,
+      "functions": 47.61,
+      "statements": 56.68
+    },
+    "client/src/components/displays/can/CanFrameRow.tsx": {
+      "lines": 66.66,
+      "branches": 66.66,
+      "functions": 50,
+      "statements": 66.66
+    },
+    "client/src/components/displays/can/CanIdLatestView.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/can/CanLoadView.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/can/CanSender.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/can/CanView.tsx": {
+      "lines": 19.44,
+      "branches": 36.36,
+      "functions": 21.42,
+      "statements": 21.42
+    },
+    "client/src/components/displays/can/canFrameFormat.ts": {
+      "lines": 52.38,
+      "branches": 20,
+      "functions": 57.14,
+      "statements": 52.17
+    },
+    "client/src/components/displays/can/canLoadViewShared.tsx": {
+      "lines": 16.66,
+      "branches": 0,
+      "functions": 7.69,
+      "statements": 12.9
+    },
+    "client/src/components/displays/command/CommandEntryTabs.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/command/CommandOperationFields.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/command/CommandSender.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/command/CommandSenderSidebar.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/common/PanelLiveness.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/displays/common/scopeShared.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/displays/compileErrors/CompileErrorGroup.tsx": {
+      "lines": 100,
+      "branches": 75,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/displays/compileErrors/CompileErrorItem.tsx": {
+      "lines": 100,
+      "branches": 75,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/displays/compileErrors/CompileErrorsView.tsx": {
+      "lines": 66.66,
+      "branches": 83.33,
+      "functions": 77.77,
+      "statements": 75
+    },
+    "client/src/components/displays/compileResults/CompileResultsView.tsx": {
+      "lines": 0.9,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0.74
+    },
+    "client/src/components/displays/compileResults/EdgeEditDialog.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/compileResults/compileResultsModel.ts": {
+      "lines": 28.57,
+      "branches": 0,
+      "functions": 0,
+      "statements": 28.57
+    },
+    "client/src/components/displays/history/OperationHistoryView.tsx": {
+      "lines": 5.17,
+      "branches": 0,
+      "functions": 0,
+      "statements": 4.16
+    },
+    "client/src/components/displays/logic/DecodedEventList.tsx": {
+      "lines": 41.5,
+      "branches": 32.3,
+      "functions": 39.13,
+      "statements": 39.49
+    },
+    "client/src/components/displays/logic/LogicTimingChart.tsx": {
+      "lines": 54.41,
+      "branches": 23.07,
+      "functions": 30,
+      "statements": 52
+    },
+    "client/src/components/displays/logic/LogicView.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/performance/PerformanceMonitorView.tsx": {
+      "lines": 5.71,
+      "branches": 0,
+      "functions": 0,
+      "statements": 4
+    },
+    "client/src/components/displays/rawdata/RawDataBackToLatest.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/displays/rawdata/RawDataRow.tsx": {
+      "lines": 93.75,
+      "branches": 72.3,
+      "functions": 75,
+      "statements": 94.28
+    },
+    "client/src/components/displays/rawdata/RawDataSendFileRow.tsx": {
+      "lines": 33.33,
+      "branches": 11.76,
+      "functions": 33.33,
+      "statements": 26.92
+    },
+    "client/src/components/displays/rawdata/RawDataSendHistoryPopover.tsx": {
+      "lines": 100,
+      "branches": 50,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/displays/rawdata/RawDataTerminalInput.tsx": {
+      "lines": 77.66,
+      "branches": 66.66,
+      "functions": 76.19,
+      "statements": 73.45
+    },
+    "client/src/components/displays/rawdata/RawDataView.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/rawdata/RawDataViewContent.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/rawdata/RawDataViewContentArea.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/rawdata/RawDataViewHeader.tsx": {
+      "lines": 52.94,
+      "branches": 44.06,
+      "functions": 50,
+      "statements": 50
+    },
+    "client/src/components/displays/rawdata/RawDataViewNumericContent.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/rawdata/RawDataViewSendPanel.tsx": {
+      "lines": 68.88,
+      "branches": 72.97,
+      "functions": 75,
+      "statements": 63.63
+    },
+    "client/src/components/displays/rawdata/RawDataViewSettings.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/rawdata/RawDataViewTerminal.tsx": {
+      "lines": 3.12,
+      "branches": 0,
+      "functions": 0,
+      "statements": 2.63
+    },
+    "client/src/components/displays/rawdata/rawDataViewHelpers.tsx": {
+      "lines": 83.07,
+      "branches": 63.51,
+      "functions": 88.23,
+      "statements": 77.64
+    },
+    "client/src/components/displays/rawdata/sendFormatLabel.ts": {
+      "lines": 83.33,
+      "branches": 80,
+      "functions": 100,
+      "statements": 71.42
+    },
+    "client/src/components/displays/rawdata/useRawDataBuffer.ts": {
+      "lines": 42.85,
+      "branches": 43.75,
+      "functions": 31.57,
+      "statements": 43.07
+    },
+    "client/src/components/displays/rawdata/useRawDataChannel.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/rawdata/useRawDataClipboard.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/rawdata/useRawDataFileSend.ts": {
+      "lines": 75,
+      "branches": 53.33,
+      "functions": 83.33,
+      "statements": 71.25
+    },
+    "client/src/components/displays/rawdata/useRawDataPrefs.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/rawdata/useRawDataSend.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/rawdata/useSendHistory.ts": {
+      "lines": 8.57,
+      "branches": 0,
+      "functions": 0,
+      "statements": 7.5
+    },
+    "client/src/components/displays/recording/RecordingDatabaseView.tsx": {
+      "lines": 3.33,
+      "branches": 0,
+      "functions": 0,
+      "statements": 2.35
+    },
+    "client/src/components/displays/recording/RecordingDisabledNotice.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/recording/recordingFormat.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/AxisSettings.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/WaveformChart.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/WaveformChartCursorOverlay.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/WaveformChartOverlays.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/WaveformCursorReadout.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/WaveformEnvelopeChart.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/WaveformTabView.tsx": {
+      "lines": 2.24,
+      "branches": 0,
+      "functions": 0,
+      "statements": 1.78
+    },
+    "client/src/components/displays/waveform/WaveformTimeline.tsx": {
+      "lines": 1.25,
+      "branches": 0,
+      "functions": 0,
+      "statements": 1.11
+    },
+    "client/src/components/displays/waveform/useWaveformSelectionActions.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/wavechartFormatters.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/waveformAutoset.ts": {
+      "lines": 100,
+      "branches": 95,
+      "functions": 100,
+      "statements": 97.29
+    },
+    "client/src/components/displays/waveform/waveformChartClipboard.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/waveformChartExport.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/displays/waveform/waveformConstants.ts": {
+      "lines": 77.77,
+      "branches": 100,
+      "functions": 0,
+      "statements": 77.77
+    },
+    "client/src/components/displays/waveform/waveformCursor.ts": {
+      "lines": 100,
+      "branches": 75.86,
+      "functions": 100,
+      "statements": 88.09
+    },
+    "client/src/components/displays/waveform/waveformInteractionHint.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/waveformInteractionHooks.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/waveform/waveformRender.ts": {
+      "lines": 9.3,
+      "branches": 0,
+      "functions": 0,
+      "statements": 8.33
+    },
+    "client/src/components/displays/waveform/waveformSeries.ts": {
+      "lines": 89.65,
+      "branches": 77.77,
+      "functions": 90,
+      "statements": 86.95
+    },
+    "client/src/components/displays/waveform/waveformUplotInit.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/widgets/AllTabContent.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/widgets/ChannelTabContent.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/widgets/CompactChannelRow.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/widgets/CurveRenderControls.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/widgets/MeasureItem.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/displays/widgets/SpectrumChart.tsx": {
+      "lines": 0.51,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0.45
+    },
+    "client/src/components/displays/widgets/StepKnob.tsx": {
+      "lines": 100,
+      "branches": 75,
+      "functions": 100,
+      "statements": 95.23
+    },
+    "client/src/components/displays/widgets/TableView.tsx": {
+      "lines": 2.12,
+      "branches": 0,
+      "functions": 0,
+      "statements": 1.78
+    },
+    "client/src/components/layout/ActivityBar.tsx": {
+      "lines": 87.5,
+      "branches": 91.66,
+      "functions": 81.81,
+      "statements": 89.47
+    },
+    "client/src/components/layout/CanLoadAlarm.tsx": {
+      "lines": 55,
+      "branches": 50,
+      "functions": 71.42,
+      "statements": 60
+    },
+    "client/src/components/layout/CompileStatusIndicator.tsx": {
+      "lines": 56,
+      "branches": 48.78,
+      "functions": 71.42,
+      "statements": 56.66
+    },
+    "client/src/components/layout/DataTabContent.tsx": {
+      "lines": 88.23,
+      "branches": 60,
+      "functions": 100,
+      "statements": 83.33
+    },
+    "client/src/components/layout/DataTabIcon.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/layout/DockCardFrame.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/layout/DockLayout.tsx": {
+      "lines": 49.31,
+      "branches": 26.47,
+      "functions": 73.07,
+      "statements": 52.68
+    },
+    "client/src/components/layout/DockedPanel.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/layout/MenuBar.tsx": {
+      "lines": 60.86,
+      "branches": 60.41,
+      "functions": 50,
+      "statements": 61.59
+    },
+    "client/src/components/layout/NodeEditor.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/layout/PipelineDropAlarm.tsx": {
+      "lines": 61.11,
+      "branches": 37.5,
+      "functions": 71.42,
+      "statements": 66.66
+    },
+    "client/src/components/layout/RunControls.tsx": {
+      "lines": 85.71,
+      "branches": 88.46,
+      "functions": 63.63,
+      "statements": 81.81
+    },
+    "client/src/components/layout/Sidebar.tsx": {
+      "lines": 70.58,
+      "branches": 42.85,
+      "functions": 66.66,
+      "statements": 70.37
+    },
+    "client/src/components/layout/StatusBar.tsx": {
+      "lines": 74.19,
+      "branches": 51.11,
+      "functions": 72.22,
+      "statements": 73.86
+    },
+    "client/src/components/layout/UpdateIndicator.tsx": {
+      "lines": 65.51,
+      "branches": 45.83,
+      "functions": 76.92,
+      "statements": 70
+    },
+    "client/src/components/lazy/DialogHost.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/lazy/lazyComponents.ts": {
+      "lines": 0,
+      "branches": 100,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/nodes/AcquisitionNode.tsx": {
+      "lines": 94.73,
+      "branches": 63.41,
+      "functions": 80.95,
+      "statements": 92
+    },
+    "client/src/components/nodes/DecoderNode.tsx": {
+      "lines": 6.25,
+      "branches": 0,
+      "functions": 0,
+      "statements": 4.76
+    },
+    "client/src/components/nodes/DecoderProperties.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/nodes/NodeFrame.tsx": {
+      "lines": 89.65,
+      "branches": 71.11,
+      "functions": 70.58,
+      "statements": 88.23
+    },
+    "client/src/components/nodes/NodePropertiesPanel.tsx": {
+      "lines": 54.16,
+      "branches": 45.16,
+      "functions": 70,
+      "statements": 55.17
+    },
+    "client/src/components/nodes/PointSelectorNode.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/nodes/ProtocolNode.tsx": {
+      "lines": 5.55,
+      "branches": 0,
+      "functions": 0,
+      "statements": 4
+    },
+    "client/src/components/nodes/ProtocolProperties.tsx": {
+      "lines": 4.16,
+      "branches": 0,
+      "functions": 0,
+      "statements": 3.57
+    },
+    "client/src/components/nodes/UnsupportedNode.tsx": {
+      "lines": 14.28,
+      "branches": 0,
+      "functions": 0,
+      "statements": 11.11
+    },
+    "client/src/components/nodes/WidgetNode.tsx": {
+      "lines": 59.25,
+      "branches": 37.5,
+      "functions": 50,
+      "statements": 46.15
+    },
+    "client/src/components/nodes/WidgetProperties.tsx": {
+      "lines": 10,
+      "branches": 0,
+      "functions": 0,
+      "statements": 6.66
+    },
+    "client/src/components/nodes/registry.ts": {
+      "lines": 89.65,
+      "branches": 50,
+      "functions": 82.35,
+      "statements": 87.87
+    },
+    "client/src/components/onboarding/ConfigGuide.tsx": {
+      "lines": 98.11,
+      "branches": 83.33,
+      "functions": 87.09,
+      "statements": 91.42
+    },
+    "client/src/components/onboarding/ConfigGuidePreview.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/onboarding/ContextualHint.tsx": {
+      "lines": 85.71,
+      "branches": 75,
+      "functions": 83.33,
+      "statements": 83.33
+    },
+    "client/src/components/onboarding/HelpCenterModal.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/onboarding/OnboardingWizard.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/onboarding/TourPopover.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/onboarding/TourSpotlight.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/onboarding/configGuideSteps.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/onboarding/helpContent.tsx": {
+      "lines": 0,
+      "branches": 100,
+      "functions": 100,
+      "statements": 0
+    },
+    "client/src/components/panels/DataPanelsPanel.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/panels/PortPicker.tsx": {
+      "lines": 67.39,
+      "branches": 54.54,
+      "functions": 60,
+      "statements": 69.23
+    },
+    "client/src/components/panels/QuickStartPanel.tsx": {
+      "lines": 3.84,
+      "branches": 0,
+      "functions": 0,
+      "statements": 3.22
+    },
+    "client/src/components/panels/RecordingDatabasePanel.tsx": {
+      "lines": 3.77,
+      "branches": 0,
+      "functions": 0,
+      "statements": 2.85
+    },
+    "client/src/components/panels/useRecordingDatabaseActions.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/panels/protocol/LogicDecoderFields.tsx": {
+      "lines": 38.23,
+      "branches": 36.84,
+      "functions": 26.31,
+      "statements": 36.11
+    },
+    "client/src/components/panels/protocol/ProfileProtocolFields.tsx": {
+      "lines": 69.23,
+      "branches": 51.02,
+      "functions": 62.5,
+      "statements": 68.75
+    },
+    "client/src/components/panels/protocol/ProtocolConfigForm.tsx": {
+      "lines": 92.3,
+      "branches": 77.27,
+      "functions": 86.66,
+      "statements": 85.71
+    },
+    "client/src/components/panels/protocol/ProtocolPreviewPanel.tsx": {
+      "lines": 85.71,
+      "branches": 72.97,
+      "functions": 93.33,
+      "statements": 83.33
+    },
+    "client/src/components/panels/registry/panelViewComponents.tsx": {
+      "lines": 40.9,
+      "branches": 6.25,
+      "functions": 14.28,
+      "statements": 33.33
+    },
+    "client/src/components/panels/registry/panelViews.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/panels/registry/reconcile.ts": {
+      "lines": 92.72,
+      "branches": 80,
+      "functions": 73.33,
+      "statements": 88.88
+    },
+    "client/src/components/panels/widgetPalette/CategoryPanel.tsx": {
+      "lines": 93.5,
+      "branches": 81.53,
+      "functions": 87.5,
+      "statements": 90.65
+    },
+    "client/src/components/panels/widgetPalette/PaletteRow.tsx": {
+      "lines": 100,
+      "branches": 66.66,
+      "functions": 100,
+      "statements": 84.61
+    },
+    "client/src/components/panels/widgetPalette/paletteModel.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/panels/widgetPalette/paletteSections.tsx": {
+      "lines": 100,
+      "branches": 84,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/profiles/FrameBlockEditor.tsx": {
+      "lines": 28.76,
+      "branches": 17.64,
+      "functions": 27.5,
+      "statements": 28.75
+    },
+    "client/src/components/profiles/FrameLayoutEditor.tsx": {
+      "lines": 64.7,
+      "branches": 68.75,
+      "functions": 60,
+      "statements": 65.21
+    },
+    "client/src/components/profiles/ProfileBasicsTab.tsx": {
+      "lines": 26.31,
+      "branches": 16.66,
+      "functions": 22.22,
+      "statements": 30
+    },
+    "client/src/components/profiles/ProfileChannelsTab.tsx": {
+      "lines": 3.22,
+      "branches": 0,
+      "functions": 0,
+      "statements": 2.77
+    },
+    "client/src/components/profiles/ProfileEditor.tsx": {
+      "lines": 84.61,
+      "branches": 66.66,
+      "functions": 66.66,
+      "statements": 84.61
+    },
+    "client/src/components/profiles/ProfileEditorCommon.ts": {
+      "lines": 42.85,
+      "branches": 0,
+      "functions": 0,
+      "statements": 37.5
+    },
+    "client/src/components/profiles/ProfileJsonTab.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/profiles/ProfileMessagesFields.tsx": {
+      "lines": 6.66,
+      "branches": 0,
+      "functions": 0,
+      "statements": 5.88
+    },
+    "client/src/components/profiles/ProfileOperationsTab.tsx": {
+      "lines": 5.88,
+      "branches": 0,
+      "functions": 0,
+      "statements": 5.55
+    },
+    "client/src/components/profiles/ProfilePreviewPane.tsx": {
+      "lines": 72.72,
+      "branches": 64.28,
+      "functions": 66.66,
+      "statements": 78.57
+    },
+    "client/src/components/profiles/ProfileWorkspace.tsx": {
+      "lines": 74.46,
+      "branches": 60.97,
+      "functions": 75.67,
+      "statements": 80
+    },
+    "client/src/components/settingFieldGroups/aiFields.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/settingFieldGroups/appearanceFields.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/settingFieldGroups/dataFields.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/settingFieldGroups/editorFields.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/settingFieldGroups/generalFields.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/settingFieldGroups/notificationsFields.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/settingFieldGroups/performanceFields.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/settingFieldGroups/serialFields.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/ui/AnimatedSwitch.tsx": {
+      "lines": 100,
+      "branches": 83.33,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/ui/CanvasErrorTooltip.tsx": {
+      "lines": 40,
+      "branches": 25,
+      "functions": 33.33,
+      "statements": 50
+    },
+    "client/src/components/ui/ContextMenu.tsx": {
+      "lines": 78.12,
+      "branches": 57.14,
+      "functions": 64.28,
+      "statements": 76.81
+    },
+    "client/src/components/ui/Dialog.tsx": {
+      "lines": 96.15,
+      "branches": 86.36,
+      "functions": 87.5,
+      "statements": 93.1
+    },
+    "client/src/components/ui/DockDragGhost.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/ui/Form.tsx": {
+      "lines": 25,
+      "branches": 36.36,
+      "functions": 25,
+      "statements": 25
+    },
+    "client/src/components/ui/HorizontalScrollArea.tsx": {
+      "lines": 100,
+      "branches": 66.66,
+      "functions": 100,
+      "statements": 89.74
+    },
+    "client/src/components/ui/PanelTabs.tsx": {
+      "lines": 75,
+      "branches": 100,
+      "functions": 66.66,
+      "statements": 75
+    },
+    "client/src/components/ui/SearchInput.tsx": {
+      "lines": 95.34,
+      "branches": 93.93,
+      "functions": 100,
+      "statements": 93.33
+    },
+    "client/src/components/ui/Select.tsx": {
+      "lines": 100,
+      "branches": 84.21,
+      "functions": 100,
+      "statements": 95.91
+    },
+    "client/src/components/ui/SlidingPill.tsx": {
+      "lines": 41.66,
+      "branches": 45.94,
+      "functions": 25,
+      "statements": 40
+    },
+    "client/src/components/ui/SuspenseFallback.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/ui/ToolbarIconButton.tsx": {
+      "lines": 100,
+      "branches": 93.93,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/ui/chip.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/ui/fields.tsx": {
+      "lines": 63.72,
+      "branches": 58.51,
+      "functions": 64.86,
+      "statements": 61.48
+    },
+    "client/src/components/ui/tabTravel.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/registry.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/button/ButtonProperties.tsx": {
+      "lines": 16.66,
+      "branches": 100,
+      "functions": 0,
+      "statements": 10
+    },
+    "client/src/components/widgets/button/ButtonWidget.tsx": {
+      "lines": 7.14,
+      "branches": 0,
+      "functions": 0,
+      "statements": 6.66
+    },
+    "client/src/components/widgets/button/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/checkbox/CheckboxProperties.tsx": {
+      "lines": 50,
+      "branches": 100,
+      "functions": 0,
+      "statements": 50
+    },
+    "client/src/components/widgets/checkbox/CheckboxWidget.tsx": {
+      "lines": 100,
+      "branches": 50,
+      "functions": 100,
+      "statements": 95.45
+    },
+    "client/src/components/widgets/checkbox/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/command/def.tsx": {
+      "lines": 66.66,
+      "branches": 100,
+      "functions": 0,
+      "statements": 66.66
+    },
+    "client/src/components/widgets/custom/CustomProperties.tsx": {
+      "lines": 20,
+      "branches": 100,
+      "functions": 0,
+      "statements": 14.28
+    },
+    "client/src/components/widgets/custom/CustomWidget.tsx": {
+      "lines": 3.63,
+      "branches": 0,
+      "functions": 0,
+      "statements": 2.98
+    },
+    "client/src/components/widgets/custom/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/fft/FFTProperties.tsx": {
+      "lines": 7.14,
+      "branches": 0,
+      "functions": 0,
+      "statements": 4.76
+    },
+    "client/src/components/widgets/fft/FFTWidget.tsx": {
+      "lines": 7.69,
+      "branches": 0,
+      "functions": 0,
+      "statements": 5.55
+    },
+    "client/src/components/widgets/fft/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/filter/FilterProperties.tsx": {
+      "lines": 8.33,
+      "branches": 0,
+      "functions": 0,
+      "statements": 4
+    },
+    "client/src/components/widgets/filter/FilterWidget.tsx": {
+      "lines": 14.28,
+      "branches": 0,
+      "functions": 0,
+      "statements": 14.28
+    },
+    "client/src/components/widgets/filter/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/gauge/GaugeProperties.tsx": {
+      "lines": 16.66,
+      "branches": 100,
+      "functions": 0,
+      "statements": 14.28
+    },
+    "client/src/components/widgets/gauge/GaugeWidget.tsx": {
+      "lines": 100,
+      "branches": 82.92,
+      "functions": 100,
+      "statements": 97.87
+    },
+    "client/src/components/widgets/gauge/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/gauge/draw.ts": {
+      "lines": 100,
+      "branches": 66.66,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/gauge/geometry.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/ifft/IFFTWidget.tsx": {
+      "lines": 10,
+      "branches": 0,
+      "functions": 0,
+      "statements": 7.14
+    },
+    "client/src/components/widgets/ifft/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/image/ImageProperties.tsx": {
+      "lines": 6.25,
+      "branches": 0,
+      "functions": 0,
+      "statements": 5.26
+    },
+    "client/src/components/widgets/image/ImageWidget.tsx": {
+      "lines": 14.28,
+      "branches": 0,
+      "functions": 0,
+      "statements": 14.28
+    },
+    "client/src/components/widgets/image/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/knob/KnobProperties.tsx": {
+      "lines": 33.33,
+      "branches": 100,
+      "functions": 0,
+      "statements": 33.33
+    },
+    "client/src/components/widgets/knob/KnobWidget.tsx": {
+      "lines": 62.74,
+      "branches": 18.51,
+      "functions": 77.77,
+      "statements": 58.46
+    },
+    "client/src/components/widgets/knob/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/label/LabelProperties.tsx": {
+      "lines": 20,
+      "branches": 100,
+      "functions": 0,
+      "statements": 14.28
+    },
+    "client/src/components/widgets/label/LabelWidget.tsx": {
+      "lines": 20,
+      "branches": 0,
+      "functions": 0,
+      "statements": 20
+    },
+    "client/src/components/widgets/label/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/led/LEDProperties.tsx": {
+      "lines": 9.09,
+      "branches": 100,
+      "functions": 0,
+      "statements": 7.69
+    },
+    "client/src/components/widgets/led/LEDWidget.tsx": {
+      "lines": 14.28,
+      "branches": 0,
+      "functions": 0,
+      "statements": 14.28
+    },
+    "client/src/components/widgets/led/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/math/MathProperties.tsx": {
+      "lines": 11.11,
+      "branches": 0,
+      "functions": 0,
+      "statements": 9.52
+    },
+    "client/src/components/widgets/math/MathWidget.tsx": {
+      "lines": 10,
+      "branches": 0,
+      "functions": 0,
+      "statements": 7.69
+    },
+    "client/src/components/widgets/math/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/model3d/Model3DWidget.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/widgets/model3d/def.tsx": {
+      "lines": 66.66,
+      "branches": 100,
+      "functions": 0,
+      "statements": 66.66
+    },
+    "client/src/components/widgets/model3d/model3dScene.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/widgets/numberDisplay/NumberDisplayProperties.tsx": {
+      "lines": 9.09,
+      "branches": 0,
+      "functions": 0,
+      "statements": 7.69
+    },
+    "client/src/components/widgets/numberDisplay/NumberDisplayWidget.tsx": {
+      "lines": 16.66,
+      "branches": 0,
+      "functions": 0,
+      "statements": 16.66
+    },
+    "client/src/components/widgets/numberDisplay/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/pieChart/PieChartProperties.tsx": {
+      "lines": 10,
+      "branches": 0,
+      "functions": 0,
+      "statements": 7.69
+    },
+    "client/src/components/widgets/pieChart/PieChartWidget.tsx": {
+      "lines": 39.28,
+      "branches": 30.18,
+      "functions": 58.33,
+      "statements": 37.11
+    },
+    "client/src/components/widgets/pieChart/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/progress/ProgressBarWidget.tsx": {
+      "lines": 86.66,
+      "branches": 64.28,
+      "functions": 66.66,
+      "statements": 86.66
+    },
+    "client/src/components/widgets/progress/ProgressProperties.tsx": {
+      "lines": 8.33,
+      "branches": 0,
+      "functions": 0,
+      "statements": 7.69
+    },
+    "client/src/components/widgets/progress/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/radio/RadioProperties.tsx": {
+      "lines": 50,
+      "branches": 100,
+      "functions": 0,
+      "statements": 50
+    },
+    "client/src/components/widgets/radio/RadioWidget.tsx": {
+      "lines": 100,
+      "branches": 62.5,
+      "functions": 100,
+      "statements": 95.45
+    },
+    "client/src/components/widgets/radio/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/rawData/def.tsx": {
+      "lines": 66.66,
+      "branches": 100,
+      "functions": 0,
+      "statements": 66.66
+    },
+    "client/src/components/widgets/shared/BindingSection.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/widgets/shared/ChoiceSection.tsx": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/components/widgets/shared/ControlRangeEditor.tsx": {
+      "lines": 5.55,
+      "branches": 0,
+      "functions": 0,
+      "statements": 4.54
+    },
+    "client/src/components/widgets/shared/NodePlaceholder.tsx": {
+      "lines": 25,
+      "branches": 8,
+      "functions": 22.22,
+      "statements": 22.72
+    },
+    "client/src/components/widgets/shared/NumericPortStatus.tsx": {
+      "lines": 57.14,
+      "branches": 38.46,
+      "functions": 33.33,
+      "statements": 62.5
+    },
+    "client/src/components/widgets/shared/NumericValueInput.tsx": {
+      "lines": 89.74,
+      "branches": 63.63,
+      "functions": 90,
+      "statements": 88.88
+    },
+    "client/src/components/widgets/shared/RangeSection.tsx": {
+      "lines": 4.34,
+      "branches": 0,
+      "functions": 0,
+      "statements": 3.22
+    },
+    "client/src/components/widgets/shared/SizeSection.tsx": {
+      "lines": 61.53,
+      "branches": 18.75,
+      "functions": 63.63,
+      "statements": 73.68
+    },
+    "client/src/components/widgets/shared/binding.ts": {
+      "lines": 82.35,
+      "branches": 72,
+      "functions": 80,
+      "statements": 76.92
+    },
+    "client/src/components/widgets/shared/portVisuals.ts": {
+      "lines": 100,
+      "branches": 33.33,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/slider/SliderProperties.tsx": {
+      "lines": 33.33,
+      "branches": 100,
+      "functions": 0,
+      "statements": 33.33
+    },
+    "client/src/components/widgets/slider/SliderWidget.tsx": {
+      "lines": 74.35,
+      "branches": 45.45,
+      "functions": 72.22,
+      "statements": 70
+    },
+    "client/src/components/widgets/slider/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/spectrum/SpectrumPlaceholder.tsx": {
+      "lines": 50,
+      "branches": 100,
+      "functions": 0,
+      "statements": 50
+    },
+    "client/src/components/widgets/spectrum/def.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/str/StrProperties.tsx": {
+      "lines": 9.09,
+      "branches": 0,
+      "functions": 0,
+      "statements": 6.25
+    },
+    "client/src/components/widgets/str/StrWidget.tsx": {
+      "lines": 8.69,
+      "branches": 0,
+      "functions": 0,
+      "statements": 6.25
+    },
+    "client/src/components/widgets/str/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/tableView/def.tsx": {
+      "lines": 66.66,
+      "branches": 100,
+      "functions": 0,
+      "statements": 66.66
+    },
+    "client/src/components/widgets/textDisplay/TextDisplayWidget.tsx": {
+      "lines": 18.18,
+      "branches": 0,
+      "functions": 0,
+      "statements": 15.38
+    },
+    "client/src/components/widgets/textDisplay/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/textInput/TextInputProperties.tsx": {
+      "lines": 20,
+      "branches": 100,
+      "functions": 0,
+      "statements": 14.28
+    },
+    "client/src/components/widgets/textInput/TextInputWidget.tsx": {
+      "lines": 16.66,
+      "branches": 100,
+      "functions": 0,
+      "statements": 14.28
+    },
+    "client/src/components/widgets/textInput/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/textOut/TextOutProperties.tsx": {
+      "lines": 8.33,
+      "branches": 0,
+      "functions": 0,
+      "statements": 5.26
+    },
+    "client/src/components/widgets/textOut/TextOutWidget.tsx": {
+      "lines": 100,
+      "branches": 66.66,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/textOut/def.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/components/widgets/trigger/TriggerView.tsx": {
+      "lines": 64.28,
+      "branches": 47.43,
+      "functions": 52.27,
+      "statements": 64.1
+    },
+    "client/src/components/widgets/trigger/def.tsx": {
+      "lines": 66.66,
+      "branches": 100,
+      "functions": 0,
+      "statements": 66.66
+    },
+    "client/src/components/widgets/waveform/def.tsx": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/i18n/instance.ts": {
+      "lines": 100,
+      "branches": 78.57,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/i18n/resources.ts": {
+      "lines": 72,
+      "branches": 56.52,
+      "functions": 66.66,
+      "statements": 68.96
+    },
+    "client/src/lib/fontAttributions.ts": {
+      "lines": 0,
+      "branches": 100,
+      "functions": 100,
+      "statements": 0
+    },
+    "client/src/lib/acquisition/acquisitionNodes.ts": {
+      "lines": 100,
+      "branches": 85.71,
+      "functions": 93.33,
+      "statements": 93.44
+    },
+    "client/src/lib/acquisition/capabilityCatalog.ts": {
+      "lines": 100,
+      "branches": 87.5,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/acquisition/deviceCardModel.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/acquisition/deviceTree.ts": {
+      "lines": 96.77,
+      "branches": 82.05,
+      "functions": 88.23,
+      "statements": 86.66
+    },
+    "client/src/lib/acquisition/deviceTreeModel.ts": {
+      "lines": 99.13,
+      "branches": 93.06,
+      "functions": 97.36,
+      "statements": 97.36
+    },
+    "client/src/lib/acquisition/schemaForm.ts": {
+      "lines": 85.48,
+      "branches": 68.18,
+      "functions": 94.73,
+      "statements": 75.58
+    },
+    "client/src/lib/acquisition/schemaHints.ts": {
+      "lines": 100,
+      "branches": 87.87,
+      "functions": 100,
+      "statements": 98.24
+    },
+    "client/src/lib/acquisition/simulation.ts": {
+      "lines": 95.91,
+      "branches": 70.21,
+      "functions": 80,
+      "statements": 81.69
+    },
+    "client/src/lib/acquisition/simulationRateLimits.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/acquisition/useDeviceNodeSnapshot.ts": {
+      "lines": 100,
+      "branches": 50,
+      "functions": 75,
+      "statements": 83.33
+    },
+    "client/src/lib/ai/activityKind.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/ai/aiErrors.ts": {
+      "lines": 61.9,
+      "branches": 65.62,
+      "functions": 100,
+      "statements": 66.66
+    },
+    "client/src/lib/ai/chatMarkdown.ts": {
+      "lines": 100,
+      "branches": 93.75,
+      "functions": 100,
+      "statements": 97.82
+    },
+    "client/src/lib/ai/streamMarkdown.ts": {
+      "lines": 92.5,
+      "branches": 85.36,
+      "functions": 100,
+      "statements": 89.79
+    },
+    "client/src/lib/ai/toolHost.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/ai/turnTimeline.ts": {
+      "lines": 100,
+      "branches": 85.71,
+      "functions": 100,
+      "statements": 95.74
+    },
+    "client/src/lib/ai/webpage.ts": {
+      "lines": 100,
+      "branches": 60.86,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/buffers/canBuffer.ts": {
+      "lines": 77.35,
+      "branches": 61.9,
+      "functions": 62.5,
+      "statements": 72.13
+    },
+    "client/src/lib/buffers/canSubscription.ts": {
+      "lines": 40,
+      "branches": 0,
+      "functions": 40,
+      "statements": 40
+    },
+    "client/src/lib/buffers/displaySubscription.ts": {
+      "lines": 66.66,
+      "branches": 50,
+      "functions": 100,
+      "statements": 66.66
+    },
+    "client/src/lib/buffers/envelopeClient.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/buffers/graphSubscription.ts": {
+      "lines": 80,
+      "branches": 100,
+      "functions": 80,
+      "statements": 80
+    },
+    "client/src/lib/buffers/listScrollPause.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/buffers/logicBuffer.ts": {
+      "lines": 71.08,
+      "branches": 61.11,
+      "functions": 60,
+      "statements": 68.42
+    },
+    "client/src/lib/buffers/logicSubscription.ts": {
+      "lines": 33.33,
+      "branches": 100,
+      "functions": 33.33,
+      "statements": 33.33
+    },
+    "client/src/lib/buffers/rawDataBuffer.ts": {
+      "lines": 90.09,
+      "branches": 75.53,
+      "functions": 81.25,
+      "statements": 87.16
+    },
+    "client/src/lib/buffers/rawDataBufferModel.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/buffers/rawDataBuffers.ts": {
+      "lines": 22.58,
+      "branches": 0,
+      "functions": 30,
+      "statements": 20.58
+    },
+    "client/src/lib/buffers/rawDataPreviewRegistry.ts": {
+      "lines": 41.17,
+      "branches": 16.66,
+      "functions": 27.27,
+      "statements": 35.71
+    },
+    "client/src/lib/buffers/rawDataSubscription.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/buffers/rawDataViewStore.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/buffers/scrollPauseController.ts": {
+      "lines": 100,
+      "branches": 94.44,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/buffers/sourceManagers.ts": {
+      "lines": 87.03,
+      "branches": 75,
+      "functions": 70,
+      "statements": 81.35
+    },
+    "client/src/lib/buffers/useCanFrameSubscription.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/buffers/waveformBuffer.ts": {
+      "lines": 93.18,
+      "branches": 100,
+      "functions": 76.47,
+      "statements": 90
+    },
+    "client/src/lib/can/canBitrate.ts": {
+      "lines": 93.93,
+      "branches": 67.85,
+      "functions": 100,
+      "statements": 78
+    },
+    "client/src/lib/commands/hex.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/commands/profileCommands.ts": {
+      "lines": 64.4,
+      "branches": 38.63,
+      "functions": 63.15,
+      "statements": 61.03
+    },
+    "client/src/lib/data/autoRange.ts": {
+      "lines": 95.77,
+      "branches": 73.07,
+      "functions": 100,
+      "statements": 88.88
+    },
+    "client/src/lib/data/dataClient.ts": {
+      "lines": 82.83,
+      "branches": 72.22,
+      "functions": 73.07,
+      "statements": 79.48
+    },
+    "client/src/lib/data/envelopeProtocol.ts": {
+      "lines": 92.5,
+      "branches": 75,
+      "functions": 100,
+      "statements": 92.68
+    },
+    "client/src/lib/data/numericTypes.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/data/sampleDecode.worker.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/data/sampleProtocol.ts": {
+      "lines": 85.71,
+      "branches": 63.15,
+      "functions": 100,
+      "statements": 86.48
+    },
+    "client/src/lib/data/waveformProtocol.ts": {
+      "lines": 94.54,
+      "branches": 60,
+      "functions": 100,
+      "statements": 94.73
+    },
+    "client/src/lib/data/__tests__/waveform.bench.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/glass/glassPresets.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/glass/glassTier.ts": {
+      "lines": 87.5,
+      "branches": 100,
+      "functions": 66.66,
+      "statements": 90.9
+    },
+    "client/src/lib/glass/liquidGlassEngine.ts": {
+      "lines": 82.45,
+      "branches": 65,
+      "functions": 100,
+      "statements": 80
+    },
+    "client/src/lib/glass/useGlassSurface.ts": {
+      "lines": 97.77,
+      "branches": 76,
+      "functions": 93.33,
+      "statements": 94.23
+    },
+    "client/src/lib/hooks/useAutoRange.ts": {
+      "lines": 50,
+      "branches": 11.11,
+      "functions": 100,
+      "statements": 51.61
+    },
+    "client/src/lib/hooks/useCanvasNodeError.ts": {
+      "lines": 55.55,
+      "branches": 16.66,
+      "functions": 100,
+      "statements": 64.28
+    },
+    "client/src/lib/hooks/useContextMenu.tsx": {
+      "lines": 66.66,
+      "branches": 57.14,
+      "functions": 60,
+      "statements": 71.87
+    },
+    "client/src/lib/hooks/useGlassAppearance.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/hooks/useGraphInput.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/hooks/useNumericPort.ts": {
+      "lines": 80,
+      "branches": 74.19,
+      "functions": 83.87,
+      "statements": 80.3
+    },
+    "client/src/lib/hooks/usePrimaryNodes.ts": {
+      "lines": 83.33,
+      "branches": 50,
+      "functions": 70,
+      "statements": 76.92
+    },
+    "client/src/lib/hooks/useSelection.ts": {
+      "lines": 32.35,
+      "branches": 0,
+      "functions": 27.27,
+      "statements": 30.95
+    },
+    "client/src/lib/hooks/useWaveformDetailBuffer.ts": {
+      "lines": 91.66,
+      "branches": 71.87,
+      "functions": 88.88,
+      "statements": 88.57
+    },
+    "client/src/lib/hooks/useWaveformMeasurements.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/hooks/useWaveformSourceBuffer.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/interaction/dismissStack.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/interaction/dockDrag.ts": {
+      "lines": 97.3,
+      "branches": 77.04,
+      "functions": 92.59,
+      "statements": 89.09
+    },
+    "client/src/lib/interaction/focusTrap.ts": {
+      "lines": 96.42,
+      "branches": 94.11,
+      "functions": 100,
+      "statements": 94.59
+    },
+    "client/src/lib/interaction/shortcuts.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/interaction/useAppShortcuts.ts": {
+      "lines": 0,
+      "branches": 100,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/interaction/useAsyncAction.ts": {
+      "lines": 100,
+      "branches": 83.33,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/interaction/useDismissOnEscape.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/interaction/useFocusTrap.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/interaction/useNumericControl.ts": {
+      "lines": 100,
+      "branches": 85,
+      "functions": 100,
+      "statements": 96.55
+    },
+    "client/src/lib/interaction/useScrollFollow.ts": {
+      "lines": 98.21,
+      "branches": 89.83,
+      "functions": 100,
+      "statements": 94.53
+    },
+    "client/src/lib/interaction/useSelect.ts": {
+      "lines": 96.82,
+      "branches": 86.11,
+      "functions": 94.44,
+      "statements": 93.9
+    },
+    "client/src/lib/models/compileErrorMessage.ts": {
+      "lines": 90.9,
+      "branches": 93.75,
+      "functions": 100,
+      "statements": 90.9
+    },
+    "client/src/lib/models/createFromCatalog.ts": {
+      "lines": 80,
+      "branches": 60.97,
+      "functions": 77.77,
+      "statements": 71.11
+    },
+    "client/src/lib/models/customWidgetDef.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/models/describeStore.ts": {
+      "lines": 97.14,
+      "branches": 76.78,
+      "functions": 96.87,
+      "statements": 92.62
+    },
+    "client/src/lib/models/descriptorView.ts": {
+      "lines": 87.83,
+      "branches": 81.25,
+      "functions": 87.17,
+      "statements": 85.05
+    },
+    "client/src/lib/models/nodePorts.ts": {
+      "lines": 94.23,
+      "branches": 80.26,
+      "functions": 100,
+      "statements": 90.14
+    },
+    "client/src/lib/models/startupSeed.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/motion/MotionPresence.tsx": {
+      "lines": 100,
+      "branches": 87.5,
+      "functions": 100,
+      "statements": 87.5
+    },
+    "client/src/lib/motion/RetentionScope.tsx": {
+      "lines": 100,
+      "branches": 90,
+      "functions": 100,
+      "statements": 95.65
+    },
+    "client/src/lib/motion/compositor.ts": {
+      "lines": 100,
+      "branches": 95.45,
+      "functions": 100,
+      "statements": 97.72
+    },
+    "client/src/lib/motion/dockFlip.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/motion/easingTokens.ts": {
+      "lines": 100,
+      "branches": 95.23,
+      "functions": 100,
+      "statements": 97.87
+    },
+    "client/src/lib/motion/flipReorder.ts": {
+      "lines": 100,
+      "branches": 87.87,
+      "functions": 100,
+      "statements": 94.36
+    },
+    "client/src/lib/motion/gsapSpring.ts": {
+      "lines": 85.71,
+      "branches": 80,
+      "functions": 100,
+      "statements": 87.5
+    },
+    "client/src/lib/motion/motionConfig.ts": {
+      "lines": 75,
+      "branches": 83.33,
+      "functions": 77.77,
+      "statements": 72
+    },
+    "client/src/lib/motion/presence.ts": {
+      "lines": 100,
+      "branches": 88.88,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/motion/release.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/motion/retention.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/motion/spring.ts": {
+      "lines": 85.98,
+      "branches": 78.84,
+      "functions": 100,
+      "statements": 82.4
+    },
+    "client/src/lib/motion/stagger.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/motion/useContentSwitch.ts": {
+      "lines": 93.75,
+      "branches": 83.33,
+      "functions": 66.66,
+      "statements": 86.95
+    },
+    "client/src/lib/motion/useMotionPresence.ts": {
+      "lines": 82.6,
+      "branches": 85.71,
+      "functions": 100,
+      "statements": 83.33
+    },
+    "client/src/lib/motion/usePresence.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/nodes/document.ts": {
+      "lines": 100,
+      "branches": 91.89,
+      "functions": 100,
+      "statements": 95
+    },
+    "client/src/lib/panels/panelDefs.ts": {
+      "lines": 100,
+      "branches": 75,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/performance/acrylicGuard.ts": {
+      "lines": 100,
+      "branches": 91.66,
+      "functions": 100,
+      "statements": 94.11
+    },
+    "client/src/lib/performance/frontendCollector.ts": {
+      "lines": 35.41,
+      "branches": 27.77,
+      "functions": 44.44,
+      "statements": 34.54
+    },
+    "client/src/lib/performance/telemetry.ts": {
+      "lines": 11.11,
+      "branches": 0,
+      "functions": 0,
+      "statements": 9.67
+    },
+    "client/src/lib/platform/backendStore.ts": {
+      "lines": 100,
+      "branches": 82.35,
+      "functions": 100,
+      "statements": 96.96
+    },
+    "client/src/lib/platform/host.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/platform/index.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/platform/tauri.ts": {
+      "lines": 15.78,
+      "branches": 0,
+      "functions": 14.28,
+      "statements": 13.63
+    },
+    "client/src/lib/platform/web.ts": {
+      "lines": 77.33,
+      "branches": 65.38,
+      "functions": 62.06,
+      "statements": 75.9
+    },
+    "client/src/lib/platform/window.ts": {
+      "lines": 75,
+      "branches": 37.5,
+      "functions": 75,
+      "statements": 50
+    },
+    "client/src/lib/profiles/defaults.ts": {
+      "lines": 32,
+      "branches": 6.25,
+      "functions": 30.76,
+      "statements": 34.61
+    },
+    "client/src/lib/profiles/format.ts": {
+      "lines": 42.85,
+      "branches": 12.5,
+      "functions": 100,
+      "statements": 42.85
+    },
+    "client/src/lib/profiles/layout.ts": {
+      "lines": 66.26,
+      "branches": 65.21,
+      "functions": 68.96,
+      "statements": 63.44
+    },
+    "client/src/lib/profiles/validation.ts": {
+      "lines": 58.02,
+      "branches": 48.05,
+      "functions": 80,
+      "statements": 55.49
+    },
+    "client/src/lib/quickstart/applyTemplate.ts": {
+      "lines": 82.85,
+      "branches": 50,
+      "functions": 85.71,
+      "statements": 81.13
+    },
+    "client/src/lib/quickstart/catalogDefaults.ts": {
+      "lines": 100,
+      "branches": 91.66,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/quickstart/snapshot.ts": {
+      "lines": 97.43,
+      "branches": 75,
+      "functions": 100,
+      "statements": 95.55
+    },
+    "client/src/lib/quickstart/templates.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/rpc/httpTransport.ts": {
+      "lines": 90.58,
+      "branches": 74.35,
+      "functions": 92,
+      "statements": 89.13
+    },
+    "client/src/lib/rpc/httpTransportProtocol.ts": {
+      "lines": 95.45,
+      "branches": 85.71,
+      "functions": 75,
+      "statements": 88.46
+    },
+    "client/src/lib/rpc/httpTransportSocket.ts": {
+      "lines": 86.03,
+      "branches": 66.21,
+      "functions": 83.33,
+      "statements": 82.5
+    },
+    "client/src/lib/rpc/index.ts": {
+      "lines": 66.66,
+      "branches": 72.91,
+      "functions": 73.91,
+      "statements": 71.42
+    },
+    "client/src/lib/rpc/livePushGate.ts": {
+      "lines": 100,
+      "branches": 86.66,
+      "functions": 100,
+      "statements": 96.87
+    },
+    "client/src/lib/rpc/tauriTransport.ts": {
+      "lines": 95.65,
+      "branches": 80,
+      "functions": 91.66,
+      "statements": 89.28
+    },
+    "client/src/lib/rpc/types.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/startup/configGuide.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/startup/phases.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/startup/reveal.ts": {
+      "lines": 85.71,
+      "branches": 57.14,
+      "functions": 75,
+      "statements": 80
+    },
+    "client/src/lib/startup/useBootstrap.ts": {
+      "lines": 93.75,
+      "branches": 100,
+      "functions": 87.5,
+      "statements": 95
+    },
+    "client/src/lib/startup/useConfigGuidePending.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/startup/useFirstFrameReveal.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/startup/useStartupDialogs.ts": {
+      "lines": 97.43,
+      "branches": 92.3,
+      "functions": 92.85,
+      "statements": 92.72
+    },
+    "client/src/lib/startup/useWorkspaceSeed.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/tauri/appExport.ts": {
+      "lines": 48.48,
+      "branches": 54.91,
+      "functions": 67.39,
+      "statements": 49.75
+    },
+    "client/src/lib/tauri/attachments.ts": {
+      "lines": 27.86,
+      "branches": 39.47,
+      "functions": 10,
+      "statements": 26.08
+    },
+    "client/src/lib/tauri/errorGuidance.ts": {
+      "lines": 90.47,
+      "branches": 75,
+      "functions": 85.71,
+      "statements": 91.66
+    },
+    "client/src/lib/tauri/mdFile.ts": {
+      "lines": 7.69,
+      "branches": 0,
+      "functions": 0,
+      "statements": 6.25
+    },
+    "client/src/lib/tauri/notifications.ts": {
+      "lines": 90.38,
+      "branches": 95,
+      "functions": 75,
+      "statements": 87.5
+    },
+    "client/src/lib/tauri/tauri.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/tauri/api/acquisition.ts": {
+      "lines": 33.33,
+      "branches": 100,
+      "functions": 29.41,
+      "statements": 33.33
+    },
+    "client/src/lib/tauri/api/ai.ts": {
+      "lines": 54.54,
+      "branches": 100,
+      "functions": 52.38,
+      "statements": 54.54
+    },
+    "client/src/lib/tauri/api/can.ts": {
+      "lines": 12.5,
+      "branches": 0,
+      "functions": 0,
+      "statements": 12.5
+    },
+    "client/src/lib/tauri/api/graph.ts": {
+      "lines": 75,
+      "branches": 100,
+      "functions": 71.42,
+      "statements": 75
+    },
+    "client/src/lib/tauri/api/observability.ts": {
+      "lines": 50,
+      "branches": 100,
+      "functions": 33.33,
+      "statements": 50
+    },
+    "client/src/lib/tauri/api/profiles.ts": {
+      "lines": 10,
+      "branches": 100,
+      "functions": 0,
+      "statements": 10
+    },
+    "client/src/lib/tauri/api/recording.ts": {
+      "lines": 25,
+      "branches": 0,
+      "functions": 20,
+      "statements": 25
+    },
+    "client/src/lib/tauri/api/transport.ts": {
+      "lines": 33.33,
+      "branches": 0,
+      "functions": 27.27,
+      "statements": 33.33
+    },
+    "client/src/lib/tauri/api/waveform.ts": {
+      "lines": 13.63,
+      "branches": 100,
+      "functions": 11.11,
+      "statements": 13.63
+    },
+    "client/src/lib/terminal/ansiParser.ts": {
+      "lines": 83.85,
+      "branches": 74.82,
+      "functions": 95.23,
+      "statements": 83.25
+    },
+    "client/src/lib/terminal/termColor.ts": {
+      "lines": 81.7,
+      "branches": 60,
+      "functions": 100,
+      "statements": 82.02
+    },
+    "client/src/lib/terminal/terminalBuffer.ts": {
+      "lines": 71.42,
+      "branches": 80,
+      "functions": 45,
+      "statements": 63.79
+    },
+    "client/src/lib/terminal/terminalHistory.ts": {
+      "lines": 100,
+      "branches": 75,
+      "functions": 100,
+      "statements": 87.5
+    },
+    "client/src/lib/terminal/terminalInput.ts": {
+      "lines": 88.37,
+      "branches": 77.58,
+      "functions": 100,
+      "statements": 81.13
+    },
+    "client/src/lib/ui/colorAlpha.ts": {
+      "lines": 61.53,
+      "branches": 20,
+      "functions": 25,
+      "statements": 50
+    },
+    "client/src/lib/ui/textTone.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/utils/a11y.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/utils/clipboard.ts": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    },
+    "client/src/lib/utils/connectionRules.ts": {
+      "lines": 93.33,
+      "branches": 82.45,
+      "functions": 100,
+      "statements": 90.9
+    },
+    "client/src/lib/utils/format.ts": {
+      "lines": 15.38,
+      "branches": 15,
+      "functions": 25,
+      "statements": 18.18
+    },
+    "client/src/lib/utils/frameBatcher.ts": {
+      "lines": 95.23,
+      "branches": 62.5,
+      "functions": 83.33,
+      "statements": 91.3
+    },
+    "client/src/lib/utils/measureDisplay.ts": {
+      "lines": 44.44,
+      "branches": 16.66,
+      "functions": 50,
+      "statements": 50
+    },
+    "client/src/lib/utils/model3dAttitude.ts": {
+      "lines": 100,
+      "branches": 80,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/utils/nodeDef.ts": {
+      "lines": 66.66,
+      "branches": 50,
+      "functions": 57.14,
+      "statements": 61.53
+    },
+    "client/src/lib/utils/nodeKindVisuals.ts": {
+      "lines": 75,
+      "branches": 64,
+      "functions": 50,
+      "statements": 76.74
+    },
+    "client/src/lib/utils/numericControl.ts": {
+      "lines": 96.55,
+      "branches": 72,
+      "functions": 100,
+      "statements": 88.57
+    },
+    "client/src/lib/utils/paletteCreation.ts": {
+      "lines": 42.42,
+      "branches": 39.13,
+      "functions": 50,
+      "statements": 40
+    },
+    "client/src/lib/utils/perfLog.ts": {
+      "lines": 73.91,
+      "branches": 66.66,
+      "functions": 75,
+      "statements": 65.38
+    },
+    "client/src/lib/utils/protocolConfig.ts": {
+      "lines": 91.66,
+      "branches": 65.21,
+      "functions": 87.5,
+      "statements": 88.46
+    },
+    "client/src/lib/utils/rawDataChannel.ts": {
+      "lines": 100,
+      "branches": 86.2,
+      "functions": 100,
+      "statements": 94.87
+    },
+    "client/src/lib/utils/rawDataFileSend.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/utils/rawDataSend.ts": {
+      "lines": 98.73,
+      "branches": 96.29,
+      "functions": 94.44,
+      "statements": 98.03
+    },
+    "client/src/lib/utils/reducedMotion.ts": {
+      "lines": 93.33,
+      "branches": 70.37,
+      "functions": 100,
+      "statements": 82.92
+    },
+    "client/src/lib/utils/revealDataTab.ts": {
+      "lines": 66.66,
+      "branches": 100,
+      "functions": 60,
+      "statements": 72.72
+    },
+    "client/src/lib/utils/scopeUtils.ts": {
+      "lines": 28.57,
+      "branches": 0,
+      "functions": 0,
+      "statements": 19.04
+    },
+    "client/src/lib/utils/stringPorts.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/utils/textEncoding.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/utils/transitionStore.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/utils/valueRange.ts": {
+      "lines": 96.77,
+      "branches": 93.54,
+      "functions": 100,
+      "statements": 94.87
+    },
+    "client/src/lib/utils/widgetSize.ts": {
+      "lines": 63.63,
+      "branches": 50,
+      "functions": 33.33,
+      "statements": 63.63
+    },
+    "client/src/lib/utils/widgetTab.ts": {
+      "lines": 100,
+      "branches": 83.33,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/lib/utils/widgetValue.ts": {
+      "lines": 88.88,
+      "branches": 83.33,
+      "functions": 100,
+      "statements": 90.9
+    },
+    "client/src/lib/widgets/customTemplate.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/settings/acrylicMaterial.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/settings/aiProvider.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/settings/applyTheme.ts": {
+      "lines": 91.93,
+      "branches": 62.06,
+      "functions": 33.33,
+      "statements": 90.47
+    },
+    "client/src/settings/configGuideSources.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/settings/css-theme-loader.ts": {
+      "lines": 93.93,
+      "branches": 71.42,
+      "functions": 85.71,
+      "statements": 82.92
+    },
+    "client/src/settings/defaults.ts": {
+      "lines": 83.33,
+      "branches": 50,
+      "functions": 100,
+      "statements": 83.33
+    },
+    "client/src/settings/fontDefaults.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/settings/theme.ts": {
+      "lines": 88.23,
+      "branches": 81.81,
+      "functions": 70.58,
+      "statements": 83.72
+    },
+    "client/src/store/aiChatStore.ts": {
+      "lines": 70.32,
+      "branches": 56.32,
+      "functions": 51.06,
+      "statements": 65.02
+    },
+    "client/src/store/aiChatStoreMcp.ts": {
+      "lines": 91.89,
+      "branches": 87.5,
+      "functions": 91.66,
+      "statements": 92.85
+    },
+    "client/src/store/aiChatStoreSupport.ts": {
+      "lines": 73.33,
+      "branches": 63.63,
+      "functions": 100,
+      "statements": 68.75
+    },
+    "client/src/store/appStore.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/store/appStoreHelpers.ts": {
+      "lines": 86.58,
+      "branches": 72.6,
+      "functions": 75.8,
+      "statements": 79.74
+    },
+    "client/src/store/canLoadAlarmStore.ts": {
+      "lines": 33.33,
+      "branches": 100,
+      "functions": 33.33,
+      "statements": 50
+    },
+    "client/src/store/configGuideStore.ts": {
+      "lines": 93.75,
+      "branches": 75,
+      "functions": 100,
+      "statements": 90
+    },
+    "client/src/store/contextMenuStore.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/store/displayLiveness.ts": {
+      "lines": 100,
+      "branches": 88.88,
+      "functions": 100,
+      "statements": 97.22
+    },
+    "client/src/store/dockDefaults.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/store/dockReconcile.ts": {
+      "lines": 85.41,
+      "branches": 64.1,
+      "functions": 100,
+      "statements": 82.45
+    },
+    "client/src/store/dockStore.ts": {
+      "lines": 76.8,
+      "branches": 57.69,
+      "functions": 86.48,
+      "statements": 72.84
+    },
+    "client/src/store/dockTree.ts": {
+      "lines": 70.42,
+      "branches": 51.94,
+      "functions": 70.58,
+      "statements": 62.92
+    },
+    "client/src/store/historyStore.ts": {
+      "lines": 87.61,
+      "branches": 72.05,
+      "functions": 88.46,
+      "statements": 82.92
+    },
+    "client/src/store/layoutStore.ts": {
+      "lines": 94.73,
+      "branches": 50,
+      "functions": 92.85,
+      "statements": 95.23
+    },
+    "client/src/store/modelCatalogStore.ts": {
+      "lines": 97.22,
+      "branches": 93.75,
+      "functions": 90.9,
+      "statements": 93.02
+    },
+    "client/src/store/onboardingStore.ts": {
+      "lines": 46.66,
+      "branches": 100,
+      "functions": 45.45,
+      "statements": 50
+    },
+    "client/src/store/performanceStore.ts": {
+      "lines": 77.77,
+      "branches": 100,
+      "functions": 77.77,
+      "statements": 83.33
+    },
+    "client/src/store/profileWorkspaceStore.ts": {
+      "lines": 43.03,
+      "branches": 38.88,
+      "functions": 42.1,
+      "statements": 40.86
+    },
+    "client/src/store/recordingDatabaseStore.ts": {
+      "lines": 40.54,
+      "branches": 33.33,
+      "functions": 50,
+      "statements": 39.77
+    },
+    "client/src/store/settingsModalSlice.ts": {
+      "lines": 70,
+      "branches": 50,
+      "functions": 66.66,
+      "statements": 70
+    },
+    "client/src/store/settingsStore.ts": {
+      "lines": 85.86,
+      "branches": 80.73,
+      "functions": 74.35,
+      "statements": 84.03
+    },
+    "client/src/store/updateStore.ts": {
+      "lines": 90.47,
+      "branches": 84.61,
+      "functions": 72.72,
+      "statements": 90.9
+    },
+    "client/src/store/waveformScopeStore.ts": {
+      "lines": 22.22,
+      "branches": 8.33,
+      "functions": 28.57,
+      "statements": 23.8
+    },
+    "client/src/store/slices/compileHir.ts": {
+      "lines": 12.5,
+      "branches": 0,
+      "functions": 14.28,
+      "statements": 10.52
+    },
+    "client/src/store/slices/compileStatus.ts": {
+      "lines": 5.26,
+      "branches": 0,
+      "functions": 7.14,
+      "statements": 5
+    },
+    "client/src/store/slices/connection.ts": {
+      "lines": 42.1,
+      "branches": 53.57,
+      "functions": 34.61,
+      "statements": 40
+    },
+    "client/src/store/slices/controlTabs.ts": {
+      "lines": 92.5,
+      "branches": 85,
+      "functions": 96,
+      "statements": 89.79
+    },
+    "client/src/store/slices/data.ts": {
+      "lines": 16.66,
+      "branches": 0,
+      "functions": 20,
+      "statements": 15.38
+    },
+    "client/src/store/slices/dataTabs.ts": {
+      "lines": 62.16,
+      "branches": 47.91,
+      "functions": 61.36,
+      "statements": 59.42
+    },
+    "client/src/store/slices/derived.ts": {
+      "lines": 84.61,
+      "branches": 25,
+      "functions": 83.33,
+      "statements": 80
+    },
+    "client/src/store/slices/events.ts": {
+      "lines": 63.38,
+      "branches": 38.98,
+      "functions": 42.55,
+      "statements": 60.18
+    },
+    "client/src/store/slices/graph.ts": {
+      "lines": 91.75,
+      "branches": 62.57,
+      "functions": 86.04,
+      "statements": 87.14
+    },
+    "client/src/store/slices/graphState.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/store/slices/protocol.ts": {
+      "lines": 10,
+      "branches": 0,
+      "functions": 5.88,
+      "statements": 7.69
+    },
+    "client/src/store/slices/runControl.ts": {
+      "lines": 77.77,
+      "branches": 100,
+      "functions": 75,
+      "statements": 80
+    },
+    "client/src/store/slices/sidebar.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/store/slices/widgets.ts": {
+      "lines": 68.67,
+      "branches": 52.5,
+      "functions": 68.42,
+      "statements": 65.76
+    },
+    "client/src/types/acquisition.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/types/common.ts": {
+      "lines": 92.3,
+      "branches": 100,
+      "functions": 0,
+      "statements": 92.3
+    },
+    "client/src/types/errors.ts": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100,
+      "statements": 100
+    },
+    "client/src/types/waveform.ts": {
+      "lines": 76.92,
+      "branches": 62.5,
+      "functions": 50,
+      "statements": 74.19
+    },
+    "client/src/types/widgets.ts": {
+      "lines": 46.15,
+      "branches": 64.28,
+      "functions": 100,
+      "statements": 46.15
+    }
+  }
+}

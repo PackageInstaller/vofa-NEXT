@@ -51,6 +51,8 @@ stays in sync with the registry, CI, and the other documents.
 - [ ] `pnpm check:motion` — every `transition`/`@keyframes` property stays on the paint layer; layout animations run in C++ and are invisible to the browser probe, so only a static check can catch them
 - [ ] `pnpm check:layers` — frontend implementation/interaction/effects/view layers must not cross their boundaries
 - [ ] `pnpm check:docs` — LICENSE/NOTICE integrity, license fields across the workspace, documentation index and links, translation metadata, and review-record metadata; see `docs/governance/`
+- [ ] `pnpm check:comments` — changed comments must explain an invariant or a contract, not a task number, phase, date, or an untracked TODO; run with `--all` for a whole-tree audit
+- [ ] `pnpm check:coverage` — a newly introduced module reaches 90% lines/branches/functions/statements and no recorded file regresses; the frontend report comes from `pnpm --dir client test:coverage` and the Rust report from `pnpm coverage:rust <workspace>`
 - [ ] `pnpm check:ci-gates` — documentation and `.forgejo` workflows match this file; keeps the gate list from being re-written by hand
 
 **Frontend**
