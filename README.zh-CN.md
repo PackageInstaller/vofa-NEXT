@@ -21,7 +21,7 @@ Lissio 是面向嵌入式、车载与工业现场的数据采集与调试主机�
 
 <p align="center">
   <a href="https://codeberg.org/lissio-industries/Lissio">
-    <img src="client/src-tauri/icons/icon.png" alt="Logo" width="80" height="80">
+    <img src="client/src-tauri/icons/Square310x310Logo.png" alt="Logo" width="80" height="80">
   </a>
 
   <h3 align="center">Lissio</h3>

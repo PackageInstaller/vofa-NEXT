@@ -22,7 +22,7 @@ Lissio is a data-acquisition and debugging host for embedded, automotive, and in
 
 <p align="center">
   <a href="https://codeberg.org/lissio-industries/Lissio">
-    <img src="client/src-tauri/icons/icon.png" alt="Logo" width="80" height="80">
+    <img src="client/src-tauri/icons/Square310x310Logo.png" alt="Logo" width="80" height="80">
   </a>
 
   <h3 align="center">Lissio</h3>
