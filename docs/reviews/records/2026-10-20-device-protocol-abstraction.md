@@ -123,7 +123,7 @@ The device-tree projection hardcodes `protocol-engine`, `simulation`,
 [`DeviceTreeInspector.tsx:59-82`](../../../client/src/components/acquisition/DeviceTreeInspector.tsx)).
 The protocol form hardcodes kinds, channel rules, decoder parameters, and
 per-protocol prose. Field labels live in a hand-maintained dictionary
-([`schemaLabels.ts`](../../../client/src/components/acquisition/schemaLabels.ts)),
+([`schemaLabels.ts`](../../../client/src/components/forms/schemaLabels.ts)),
 so a backend field rename silently falls back to a title-cased identifier.
 
 ### P6. Guidance is structurally absent, not merely thin copy
@@ -149,7 +149,7 @@ protocol.
   while Modbus and S7 hand-write schemas and UI hints, so the two families cannot
   share a form renderer safely.
 - `SchemaFields` consumes only the `order` hint and supports a narrow JSON Schema
-  subset ([`SchemaFields.tsx:28-51`](../../../client/src/components/acquisition/SchemaFields.tsx)),
+  subset ([current schema form](../../../client/src/components/forms/SchemaForm.tsx)),
   which is why adapters keep writing bespoke forms.
 - Quickstart templates hardcode protocol kinds
   ([`templates.ts:40-264`](../../../client/src/lib/quickstart/templates.ts)).
