@@ -95,7 +95,7 @@ const RULES = [
   },
   {
     id: 'L8',
-    files: /^src\/lib\/(?:rpc|platform|tauri|data|buffers|models|utils|panels)\//,
+    files: /^src\/lib\/(?:rpc|platform|tauri|data|buffers|models|utils|panels|templates)\//,
     forbid: /^src\/components\//,
     why: 'The implementation layer must not depend on the view — pulling view details into it would give pure modules such as requests / buffers / catalogs a rendering dependency',
   },

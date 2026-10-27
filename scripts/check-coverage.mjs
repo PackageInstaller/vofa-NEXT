@@ -33,6 +33,9 @@ const baselinePath = join(repoRoot, 'scripts', 'coverage-baseline.json');
 /** Metrics compared for every file, in report order. */
 const METRICS = ['lines', 'branches', 'functions', 'statements'];
 
+/** The subset of those metrics an LLVM export can carry; the rest are not recorded. */
+const RUST_METRICS = ['lines', 'functions'];
+
 /** A module introduced by this change is expected to be tested from its first commit. */
 export const NEW_MODULE_FLOOR = 90;
 
@@ -113,7 +116,10 @@ function frontendReport() {
  * A `cargo llvm-cov --json` export as `{ files }`.
  *
  * The export lists absolute paths, so each is mapped back to its repository-relative form. The
- * `data[0].totals` block carries the workspace percentage for the same four metrics.
+ * `data[0].totals` block carries the workspace percentage for the metrics LLVM actually
+ * instruments: lines and functions always, branches only under branch instrumentation, and
+ * regions instead of statements. A metric the export does not measure is omitted rather than
+ * recorded as zero — a zero would read as "0% covered" and silently pass forever.
  */
 function rustReport(workspace) {
   const path = join(repoRoot, 'coverage', `rust-${workspace.replace(/[\\/]/g, '-')}.json`);
@@ -127,31 +133,23 @@ function rustReport(workspace) {
     const summary = entry.summary ?? {};
     const entryMetrics = (metric) => {
       const value = summary[metric];
-      if (value === undefined || value.count === 0) return 0;
+      if (value === undefined || value.count === 0) return undefined;
       return (value.covered / value.count) * 100;
     };
-    files[key] = {
-      lines: entryMetrics('lines'),
-      branches: entryMetrics('branches'),
-      functions: entryMetrics('functions'),
-      statements: entryMetrics('statements'),
-    };
+    const measured = {};
+    for (const metric of RUST_METRICS) {
+      const value = entryMetrics(metric);
+      if (value !== undefined) measured[metric] = value;
+    }
+    files[key] = measured;
   }
   const totals = parsed.data?.[0]?.totals ?? {};
-  const totalMetric = (metric) => {
+  const total = {};
+  for (const metric of RUST_METRICS) {
     const value = totals[metric];
-    if (value === undefined || value.count === 0) return 0;
-    return (value.covered / value.count) * 100;
-  };
-  return {
-    files,
-    total: {
-      lines: totalMetric('lines'),
-      branches: totalMetric('branches'),
-      functions: totalMetric('functions'),
-      statements: totalMetric('statements'),
-    },
-  };
+    if (value !== undefined && value.count > 0) total[metric] = (value.covered / value.count) * 100;
+  }
+  return { files, total };
 }
 
 /**
@@ -181,7 +179,10 @@ export function judgeCoverage(files, baselineFiles) {
     if ((metrics.lines?.total ?? metrics.lines ?? 0) === 0) continue;
     const floors = coverageFloors(path, baselineFiles[path]);
     for (const metric of METRICS) {
-      const actual = metrics[metric] ?? 0;
+      const actual = metrics[metric];
+      // A report that does not measure a metric (LLVM has no statement count) cannot say the
+      // file regressed on it; recording the absence as zero would pass silently instead.
+      if (actual === undefined) continue;
       const floor = floors[metric];
       if (actual + 0.005 < floor) findings.push({ path, metric, actual, floor });
     }
@@ -214,11 +215,15 @@ for (const { name, report } of reports) {
   }
   for (const [path, metrics] of Object.entries(report.files)) {
     updated.files[path] = Object.fromEntries(
-      METRICS.map((metric) => [metric, Number((metrics[metric] ?? 0).toFixed(2))]),
+      METRICS.filter((metric) => metrics[metric] !== undefined).map((metric) => [
+        metric,
+        Number(metrics[metric].toFixed(2)),
+      ]),
     );
   }
   for (const metric of METRICS) {
-    updated.total[`${name}:${metric}`] = Number((report.total[metric] ?? 0).toFixed(2));
+    if (report.total[metric] === undefined) continue;
+    updated.total[`${name}:${metric}`] = Number(report.total[metric].toFixed(2));
   }
   console.log(`${name}: ${Object.keys(report.files).length} file(s) measured`);
 }

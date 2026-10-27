@@ -3,7 +3,15 @@
     "frontend:lines": 57.34,
     "frontend:branches": 48.22,
     "frontend:functions": 49.98,
-    "frontend:statements": 55.3
+    "frontend:statements": 55.3,
+    "rust:server:lines": 56.29,
+    "rust:server:functions": 48.09,
+    "rust:server/core:lines": 88.73,
+    "rust:server/core:functions": 85.14,
+    "rust:server/data:lines": 84.62,
+    "rust:server/data:functions": 82.98,
+    "rust:server/physical:lines": 72.09,
+    "rust:server/physical:functions": 66.56
   },
   "files": {
     "client/src/App.tsx": {
@@ -3191,6 +3199,2034 @@
       "branches": 64.28,
       "functions": 100,
       "statements": 46.15
+    },
+    "server/crates/ai/chat-session/src/history.rs": {
+      "lines": 95.29,
+      "functions": 100
+    },
+    "server/crates/ai/chat-session/src/persistence.rs": {
+      "lines": 88.33,
+      "functions": 71.43
+    },
+    "server/crates/ai/chat-session/src/store.rs": {
+      "lines": 94.41,
+      "functions": 100
+    },
+    "server/crates/ai/chat/src/recorder.rs": {
+      "lines": 95.9,
+      "functions": 91.67
+    },
+    "server/crates/ai/chat/src/runner.rs": {
+      "lines": 76.55,
+      "functions": 80
+    },
+    "server/crates/ai/llm/src/client.rs": {
+      "lines": 10.81,
+      "functions": 13.04
+    },
+    "server/crates/ai/llm/src/types.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/ai/mcp-client/src/manager.rs": {
+      "lines": 8.87,
+      "functions": 6.67
+    },
+    "server/crates/ai/mcp-client/src/store.rs": {
+      "lines": 69.7,
+      "functions": 37.5
+    },
+    "server/crates/ai/mcp-client/src/types.rs": {
+      "lines": 83.33,
+      "functions": 66.67
+    },
+    "server/crates/desktop/ai-host/src/lib.rs": {
+      "lines": 23.75,
+      "functions": 18.92
+    },
+    "server/crates/desktop/ai-host/src/local_server.rs": {
+      "lines": 6.58,
+      "functions": 12.5
+    },
+    "server/crates/desktop/ai-host/src/native_executor/composite.rs": {
+      "lines": 34.38,
+      "functions": 28.57
+    },
+    "server/crates/desktop/ai-host/src/native_executor/executor.rs": {
+      "lines": 77.33,
+      "functions": 80
+    },
+    "server/crates/desktop/ai-host/src/native_executor/frontend.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/ai-host/src/native_executor/title.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/ai-host/src/prompt.rs": {
+      "lines": 86.14,
+      "functions": 90
+    },
+    "server/crates/desktop/ai-host/src/secret.rs": {
+      "lines": 50.25,
+      "functions": 44.12
+    },
+    "server/crates/desktop/ai-host/src/test_support.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/ai-host/src/turn.rs": {
+      "lines": 89.36,
+      "functions": 91.67
+    },
+    "server/crates/desktop/ai-host/src/web_fetch.rs": {
+      "lines": 84.21,
+      "functions": 61.54
+    },
+    "server/crates/desktop/app/src/app_state.rs": {
+      "lines": 77.14,
+      "functions": 57.14
+    },
+    "server/crates/desktop/app/src/background.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/app/src/display/snapshot.rs": {
+      "lines": 13.21,
+      "functions": 33.33
+    },
+    "server/crates/desktop/app/src/display/stream/binary.rs": {
+      "lines": 44.09,
+      "functions": 66.67
+    },
+    "server/crates/desktop/app/src/display/stream/envelope_stream.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/app/src/display/stream/measurement_stream.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/app/src/display/stream/mod.rs": {
+      "lines": 1.98,
+      "functions": 4.35
+    },
+    "server/crates/desktop/app/src/display/stream/sample_stream.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/app/src/display/target.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/display/waveform_binary.rs": {
+      "lines": 97.85,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/measure/api.rs": {
+      "lines": 87.5,
+      "functions": 85.71
+    },
+    "server/crates/desktop/app/src/measure/extract.rs": {
+      "lines": 97.65,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/measure/mod.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/measure/stats.rs": {
+      "lines": 98.72,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/models/catalog.rs": {
+      "lines": 97.14,
+      "functions": 93.1
+    },
+    "server/crates/desktop/app/src/models/catalog/templates/mod.rs": {
+      "lines": 91.3,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/models/catalog/templates/palette.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/models/catalog/templates/panels.rs": {
+      "lines": 93.88,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/models/catalog/templates/widgets.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/models/defaults.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/models/describe.rs": {
+      "lines": 80.95,
+      "functions": 84.21
+    },
+    "server/crates/desktop/app/src/models/describe_source.rs": {
+      "lines": 92.42,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/models/mod.rs": {
+      "lines": 81.25,
+      "functions": 50
+    },
+    "server/crates/desktop/app/src/models/prepare.rs": {
+      "lines": 34.24,
+      "functions": 33.33
+    },
+    "server/crates/desktop/app/src/preview.rs": {
+      "lines": 75.12,
+      "functions": 90
+    },
+    "server/crates/desktop/app/src/profile_ops.rs": {
+      "lines": 85.88,
+      "functions": 68.75
+    },
+    "server/crates/desktop/app/src/profiles.rs": {
+      "lines": 62.46,
+      "functions": 56.41
+    },
+    "server/crates/desktop/app/src/protocol_ops.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/app/src/run_ops.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/app/src/transport_ops.rs": {
+      "lines": 20.06,
+      "functions": 20
+    },
+    "server/crates/desktop/app/src/validation.rs": {
+      "lines": 69.31,
+      "functions": 78.57
+    },
+    "server/crates/desktop/app/src/workspace.rs": {
+      "lines": 65.66,
+      "functions": 72.22
+    },
+    "server/crates/desktop/backend-cli/src/cmd/data.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/backend-cli/src/cmd/devices.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/backend-cli/src/cmd/graph.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/backend-cli/src/cmd/mod.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/backend-cli/src/cmd/record.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/backend-cli/src/cmd/run.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/backend-cli/src/cmd/transfer.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/backend-cli/src/lib.rs": {
+      "lines": 27.4,
+      "functions": 22.22
+    },
+    "server/crates/desktop/backend-cli/src/main.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/backend-cli/src/sink.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/backend-host/src/artifacts.rs": {
+      "lines": 79.41,
+      "functions": 63.64
+    },
+    "server/crates/desktop/backend-host/src/assembly.rs": {
+      "lines": 82,
+      "functions": 33.33
+    },
+    "server/crates/desktop/backend-host/src/config.rs": {
+      "lines": 80.95,
+      "functions": 80
+    },
+    "server/crates/desktop/backend-host/src/host.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/backend-host/src/lifecycle.rs": {
+      "lines": 82.22,
+      "functions": 66.67
+    },
+    "server/crates/desktop/backend-host/src/settings.rs": {
+      "lines": 86.84,
+      "functions": 69.23
+    },
+    "server/crates/desktop/backend-host/src/token.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/backend-server/src/config.rs": {
+      "lines": 46.27,
+      "functions": 33.33
+    },
+    "server/crates/desktop/backend-server/src/diagnostics.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/backend-server/src/frames.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/backend-server/src/http.rs": {
+      "lines": 44.36,
+      "functions": 54.35
+    },
+    "server/crates/desktop/backend-server/src/lib.rs": {
+      "lines": 16.24,
+      "functions": 19.05
+    },
+    "server/crates/desktop/backend-server/src/main.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/backend-server/src/outbox.rs": {
+      "lines": 87.57,
+      "functions": 90.48
+    },
+    "server/crates/desktop/backend-server/src/session.rs": {
+      "lines": 1.35,
+      "functions": 5.26
+    },
+    "server/crates/desktop/backend-server/src/sink.rs": {
+      "lines": 11.76,
+      "functions": 16.67
+    },
+    "server/crates/desktop/control-api/src/can_export.rs": {
+      "lines": 94.81,
+      "functions": 75
+    },
+    "server/crates/desktop/control-api/src/capabilities/acquisition.rs": {
+      "lines": 19.05,
+      "functions": 5.26
+    },
+    "server/crates/desktop/control-api/src/capabilities/can.rs": {
+      "lines": 50,
+      "functions": 42.86
+    },
+    "server/crates/desktop/control-api/src/capabilities/graph.rs": {
+      "lines": 29.17,
+      "functions": 14.29
+    },
+    "server/crates/desktop/control-api/src/capabilities/knowledge.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/control-api/src/capabilities/logic.rs": {
+      "lines": 50,
+      "functions": 50
+    },
+    "server/crates/desktop/control-api/src/capabilities/node.rs": {
+      "lines": 40,
+      "functions": 50
+    },
+    "server/crates/desktop/control-api/src/capabilities/recording.rs": {
+      "lines": 18.67,
+      "functions": 4.35
+    },
+    "server/crates/desktop/control-api/src/capabilities/registry.rs": {
+      "lines": 95.06,
+      "functions": 100
+    },
+    "server/crates/desktop/control-api/src/capabilities/skill.rs": {
+      "lines": 92,
+      "functions": 100
+    },
+    "server/crates/desktop/control-api/src/capabilities/tool.rs": {
+      "lines": 80.49,
+      "functions": 73.68
+    },
+    "server/crates/desktop/control-api/src/capabilities/transport.rs": {
+      "lines": 43.64,
+      "functions": 20
+    },
+    "server/crates/desktop/control-api/src/capabilities/waveform.rs": {
+      "lines": 16.67,
+      "functions": 9.09
+    },
+    "server/crates/desktop/control-api/src/control.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/control-api/src/data.rs": {
+      "lines": 8.98,
+      "functions": 9.52
+    },
+    "server/crates/desktop/control-api/src/graph_hir.rs": {
+      "lines": 83.51,
+      "functions": 88.89
+    },
+    "server/crates/desktop/control-api/src/panel_data.rs": {
+      "lines": 98.73,
+      "functions": 83.33
+    },
+    "server/crates/desktop/control-api/src/recording.rs": {
+      "lines": 4.09,
+      "functions": 4.41
+    },
+    "server/crates/desktop/control-api/src/tools.rs": {
+      "lines": 23.15,
+      "functions": 15.25
+    },
+    "server/crates/desktop/evaluator/src/filtered_sources.rs": {
+      "lines": 50,
+      "functions": 31.58
+    },
+    "server/crates/desktop/evaluator/src/spectrum_sync.rs": {
+      "lines": 49.23,
+      "functions": 42.86
+    },
+    "server/crates/desktop/events/src/lib.rs": {
+      "lines": 43.14,
+      "functions": 60
+    },
+    "server/crates/desktop/graph_ops/src/apply.rs": {
+      "lines": 87.58,
+      "functions": 88.89
+    },
+    "server/crates/desktop/graph_ops/src/compile_queue.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/graph_ops/src/derived.rs": {
+      "lines": 63.08,
+      "functions": 73.33
+    },
+    "server/crates/desktop/graph_ops/src/device_tree.rs": {
+      "lines": 89.77,
+      "functions": 75
+    },
+    "server/crates/desktop/graph_ops/src/document.rs": {
+      "lines": 75.74,
+      "functions": 76.92
+    },
+    "server/crates/desktop/graph_ops/src/inject.rs": {
+      "lines": 76.19,
+      "functions": 88.89
+    },
+    "server/crates/desktop/graph_ops/src/simulation.rs": {
+      "lines": 92.31,
+      "functions": 100
+    },
+    "server/crates/desktop/graph_ops/src/source_graph.rs": {
+      "lines": 77.83,
+      "functions": 74.07
+    },
+    "server/crates/desktop/graph_ops/src/validate.rs": {
+      "lines": 97.56,
+      "functions": 100
+    },
+    "server/crates/desktop/mcp-server/src/server/mod.rs": {
+      "lines": 40,
+      "functions": 25
+    },
+    "server/crates/desktop/mcp-server/src/server/ports.rs": {
+      "lines": 95.45,
+      "functions": 100
+    },
+    "server/crates/desktop/mcp-server/src/server/router.rs": {
+      "lines": 55.77,
+      "functions": 60
+    },
+    "server/crates/desktop/mcp-server/src/server/runtime.rs": {
+      "lines": 25.84,
+      "functions": 28.57
+    },
+    "server/crates/desktop/performance/src/model.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/performance/src/monitor.rs": {
+      "lines": 83.23,
+      "functions": 83.33
+    },
+    "server/crates/desktop/pipeline/src/data_plane/byte_router.rs": {
+      "lines": 55.92,
+      "functions": 61.11
+    },
+    "server/crates/desktop/pipeline/src/data_plane/eval_queue.rs": {
+      "lines": 98.57,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/data_plane/eval_worker.rs": {
+      "lines": 14.06,
+      "functions": 66.67
+    },
+    "server/crates/desktop/pipeline/src/data_plane/frame_dispatch.rs": {
+      "lines": 77.82,
+      "functions": 87.5
+    },
+    "server/crates/desktop/pipeline/src/data_plane/metrics.rs": {
+      "lines": 10.81,
+      "functions": 33.33
+    },
+    "server/crates/desktop/pipeline/src/data_plane/mod.rs": {
+      "lines": 83.26,
+      "functions": 81.48
+    },
+    "server/crates/desktop/pipeline/src/data_plane/protocol_feed.rs": {
+      "lines": 75.84,
+      "functions": 76.92
+    },
+    "server/crates/desktop/pipeline/src/data_plane/protocol_node_state.rs": {
+      "lines": 90.83,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/data_plane/read_task.rs": {
+      "lines": 64.51,
+      "functions": 69.23
+    },
+    "server/crates/desktop/pipeline/src/data_plane/reconcile.rs": {
+      "lines": 86.52,
+      "functions": 88.89
+    },
+    "server/crates/desktop/pipeline/src/data_plane/routes.rs": {
+      "lines": 76.75,
+      "functions": 66.67
+    },
+    "server/crates/desktop/pipeline/src/eval_state.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/execution.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/feed_parallel.rs": {
+      "lines": 83.33,
+      "functions": 75
+    },
+    "server/crates/desktop/pipeline/src/graph_eval/guards.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/graph_eval/hot_path.rs": {
+      "lines": 84.48,
+      "functions": 88.89
+    },
+    "server/crates/desktop/pipeline/src/graph_eval/predicates.rs": {
+      "lines": 88.37,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/graph_eval/recording.rs": {
+      "lines": 32.97,
+      "functions": 25
+    },
+    "server/crates/desktop/pipeline/src/graph_eval/snapshot_eval.rs": {
+      "lines": 62.28,
+      "functions": 85.71
+    },
+    "server/crates/desktop/pipeline/src/graph_eval_parallel.rs": {
+      "lines": 84.75,
+      "functions": 93.33
+    },
+    "server/crates/desktop/pipeline/src/graph_eval_parallel/barrier.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/graph_eval_parallel/plan.rs": {
+      "lines": 92.83,
+      "functions": 94.74
+    },
+    "server/crates/desktop/pipeline/src/graph_eval_parallel/publish.rs": {
+      "lines": 69.08,
+      "functions": 80
+    },
+    "server/crates/desktop/pipeline/src/graph_eval_parallel/simd/mod.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/graph_eval_parallel/simd/ops.rs": {
+      "lines": 95.76,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/graph_eval_parallel/simd/plans.rs": {
+      "lines": 96.08,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/graph_eval_parallel/worker.rs": {
+      "lines": 80.24,
+      "functions": 80
+    },
+    "server/crates/desktop/pipeline/src/point_projection.rs": {
+      "lines": 26,
+      "functions": 40
+    },
+    "server/crates/desktop/pipeline/src/run_control.rs": {
+      "lines": 93.18,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/runtime/adaptive_rate.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/pipeline/src/runtime/command_sender.rs": {
+      "lines": 27.45,
+      "functions": 21.05
+    },
+    "server/crates/desktop/pipeline/src/runtime/protocol_runtime.rs": {
+      "lines": 75.94,
+      "functions": 71.43
+    },
+    "server/crates/desktop/pipeline/src/runtime/tickers.rs": {
+      "lines": 20.63,
+      "functions": 20
+    },
+    "server/crates/desktop/rpc-api/src/acquisition.rs": {
+      "lines": 19.46,
+      "functions": 19.35
+    },
+    "server/crates/desktop/rpc-api/src/ai.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/rpc-api/src/args.rs": {
+      "lines": 76.24,
+      "functions": 68.18
+    },
+    "server/crates/desktop/rpc-api/src/buffer.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/rpc-api/src/catalog.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/rpc-api/src/commands.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/rpc-api/src/data.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/rpc-api/src/devices.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/rpc-api/src/export.rs": {
+      "lines": 22.58,
+      "functions": 27.27
+    },
+    "server/crates/desktop/rpc-api/src/graph.rs": {
+      "lines": 15.51,
+      "functions": 14.29
+    },
+    "server/crates/desktop/rpc-api/src/lib.rs": {
+      "lines": 68.35,
+      "functions": 100
+    },
+    "server/crates/desktop/rpc-api/src/models.rs": {
+      "lines": 60.5,
+      "functions": 43.75
+    },
+    "server/crates/desktop/rpc-api/src/panel.rs": {
+      "lines": 65.22,
+      "functions": 50
+    },
+    "server/crates/desktop/rpc-api/src/performance.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/rpc-api/src/pipeline.rs": {
+      "lines": 42.42,
+      "functions": 40
+    },
+    "server/crates/desktop/rpc-api/src/profiles.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/rpc-api/src/recording.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/rpc-api/src/transport.rs": {
+      "lines": 6.47,
+      "functions": 3.57
+    },
+    "server/crates/desktop/schema-store/src/error.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/schema-store/src/filesystem.rs": {
+      "lines": 87.77,
+      "functions": 67.27
+    },
+    "server/crates/desktop/schema-store/src/io.rs": {
+      "lines": 72.82,
+      "functions": 52.63
+    },
+    "server/crates/desktop/schema-store/src/memory.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/crates/desktop/schema-store/src/state.rs": {
+      "lines": 96.75,
+      "functions": 88.24
+    },
+    "server/crates/desktop/stream/src/dispatcher.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/crates/desktop/stream/src/stream/mod.rs": {
+      "lines": 40.91,
+      "functions": 40.74
+    },
+    "server/crates/desktop/stream/src/stream/waveform.rs": {
+      "lines": 80,
+      "functions": 71.43
+    },
+    "server/core/crates/protocol/device_profile/src/binding.rs": {
+      "lines": 95.38,
+      "functions": 100
+    },
+    "server/core/crates/protocol/device_profile/src/compiler.rs": {
+      "lines": 95.23,
+      "functions": 90.48
+    },
+    "server/core/crates/protocol/device_profile/src/compiler_frame.rs": {
+      "lines": 90.74,
+      "functions": 100
+    },
+    "server/core/crates/protocol/device_profile/src/engine/item.rs": {
+      "lines": 90,
+      "functions": 100
+    },
+    "server/core/crates/protocol/device_profile/src/engine/mod.rs": {
+      "lines": 94.98,
+      "functions": 88.89
+    },
+    "server/core/crates/protocol/device_profile/src/engine/operations.rs": {
+      "lines": 70.59,
+      "functions": 52.5
+    },
+    "server/core/crates/protocol/device_profile/src/engine/scaling.rs": {
+      "lines": 97.29,
+      "functions": 100
+    },
+    "server/core/crates/protocol/device_profile/src/engine/trait_impl.rs": {
+      "lines": 60,
+      "functions": 61.54
+    },
+    "server/core/crates/protocol/device_profile/src/frame/checksum.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/device_profile/src/frame/decode.rs": {
+      "lines": 95.22,
+      "functions": 97.14
+    },
+    "server/core/crates/protocol/device_profile/src/frame/fixtures.rs": {
+      "lines": 96.89,
+      "functions": 100
+    },
+    "server/core/crates/protocol/device_profile/src/frame/layout.rs": {
+      "lines": 90.63,
+      "functions": 91.67
+    },
+    "server/core/crates/protocol/device_profile/src/frame/mod.rs": {
+      "lines": 99.26,
+      "functions": 100
+    },
+    "server/core/crates/protocol/device_profile/src/interface.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/device_profile/src/paths.rs": {
+      "lines": 74,
+      "functions": 92.31
+    },
+    "server/core/crates/protocol/device_profile/src/registry.rs": {
+      "lines": 98.47,
+      "functions": 93.33
+    },
+    "server/core/crates/protocol/device_profile/src/test_support/doubles.rs": {
+      "lines": 80.62,
+      "functions": 79.17
+    },
+    "server/core/crates/protocol/device_profile/src/test_support/frame.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/device_profile/src/test_support/profiles.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/device_profile/src/test_support/schema.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/device_profile/src/test_support/scripted.rs": {
+      "lines": 93.28,
+      "functions": 90.48
+    },
+    "server/core/crates/protocol/device_profile/src/test_support/values.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/logic/src/buffers.rs": {
+      "lines": 98.17,
+      "functions": 100
+    },
+    "server/core/crates/protocol/logic/src/types.rs": {
+      "lines": 88.12,
+      "functions": 88.89
+    },
+    "server/core/crates/protocol/logic_decoder/src/core.rs": {
+      "lines": 74.32,
+      "functions": 63.64
+    },
+    "server/core/crates/protocol/logic_decoder/src/pipeline.rs": {
+      "lines": 97.5,
+      "functions": 100
+    },
+    "server/core/crates/protocol/logic_decoder/src/registry.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/points/src/lib.rs": {
+      "lines": 28.57,
+      "functions": 22.22
+    },
+    "server/core/crates/protocol/points/src/projection.rs": {
+      "lines": 84.62,
+      "functions": 100
+    },
+    "server/core/crates/protocol/points/src/scale.rs": {
+      "lines": 88.89,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol/src/buffer.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol/src/config.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol/src/frame.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol/src/frame_length.rs": {
+      "lines": 92.25,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol/src/frame_validate.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol/src/output.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol/src/parse.rs": {
+      "lines": 95.83,
+      "functions": 87.5
+    },
+    "server/core/crates/protocol/protocol/src/profile_validate.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol/src/registry.rs": {
+      "lines": 78.57,
+      "functions": 72.22
+    },
+    "server/core/crates/protocol/protocol/src/split.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol/src/text.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol/src/traits.rs": {
+      "lines": 85.71,
+      "functions": 80
+    },
+    "server/core/crates/protocol/protocol_can_bridge/src/candle.rs": {
+      "lines": 82.95,
+      "functions": 64.29
+    },
+    "server/core/crates/protocol/protocol_can_bridge/src/rawdata.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol_can_bridge/src/registry.rs": {
+      "lines": 99.35,
+      "functions": 100
+    },
+    "server/core/crates/protocol/protocol_can_bridge/src/slcan.rs": {
+      "lines": 75.81,
+      "functions": 68.75
+    },
+    "server/core/crates/protocol/protocol_can_bridge/src/slcan_codec.rs": {
+      "lines": 92,
+      "functions": 90.91
+    },
+    "server/core/crates/protocol/protocol_float/src/firewater.rs": {
+      "lines": 92.86,
+      "functions": 86.67
+    },
+    "server/core/crates/protocol/protocol_float/src/justfloat.rs": {
+      "lines": 97.14,
+      "functions": 93.33
+    },
+    "server/core/crates/protocol/protocol_float/src/registry.rs": {
+      "lines": 99.26,
+      "functions": 91.67
+    },
+    "server/core/crates/protocol/wire_codec_cbor/src/decoder.rs": {
+      "lines": 92.67,
+      "functions": 93.33
+    },
+    "server/core/crates/protocol/wire_codec_cbor/src/encode.rs": {
+      "lines": 90.09,
+      "functions": 77.78
+    },
+    "server/core/crates/protocol/wire_codec_cbor/src/field.rs": {
+      "lines": 95.98,
+      "functions": 97.56
+    },
+    "server/core/crates/protocol/wire_codec_cbor/src/framing.rs": {
+      "lines": 92.23,
+      "functions": 90.91
+    },
+    "server/core/crates/protocol/wire_codec_cbor/src/generic.rs": {
+      "lines": 90.41,
+      "functions": 75
+    },
+    "server/core/crates/protocol/wire_codec_cbor/src/index.rs": {
+      "lines": 97.78,
+      "functions": 100
+    },
+    "server/core/crates/protocol/wire_codec_cbor/src/lib.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/wire_codec_cbor/src/limits.rs": {
+      "lines": 85,
+      "functions": 75
+    },
+    "server/core/crates/protocol/wire_codec_cbor/src/shape.rs": {
+      "lines": 99.03,
+      "functions": 100
+    },
+    "server/core/crates/protocol/wire_codec_cbor/src/support.rs": {
+      "lines": 96.67,
+      "functions": 80
+    },
+    "server/core/crates/protocol/wire_codec_cbor/src/test_support.rs": {
+      "lines": 99.54,
+      "functions": 100
+    },
+    "server/core/crates/protocol/wire_codec_protobuf/src/decode.rs": {
+      "lines": 89.57,
+      "functions": 86.36
+    },
+    "server/core/crates/protocol/wire_codec_protobuf/src/encode.rs": {
+      "lines": 82.53,
+      "functions": 88.24
+    },
+    "server/core/crates/protocol/wire_codec_protobuf/src/index.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/wire_codec_protobuf/src/lib.rs": {
+      "lines": 92.68,
+      "functions": 85.71
+    },
+    "server/core/crates/protocol/wire_codec_protobuf/src/mapping.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/wire_codec_protobuf/src/test_support.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/wire_codec_protobuf/src/varint.rs": {
+      "lines": 93.26,
+      "functions": 85.71
+    },
+    "server/core/crates/protocol/wire_codec_sbe/src/decode.rs": {
+      "lines": 90.07,
+      "functions": 88.89
+    },
+    "server/core/crates/protocol/wire_codec_sbe/src/encode.rs": {
+      "lines": 86.67,
+      "functions": 62.5
+    },
+    "server/core/crates/protocol/wire_codec_sbe/src/encoding.rs": {
+      "lines": 89.19,
+      "functions": 100
+    },
+    "server/core/crates/protocol/wire_codec_sbe/src/header.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/protocol/wire_codec_sbe/src/layout.rs": {
+      "lines": 96.15,
+      "functions": 100
+    },
+    "server/core/crates/protocol/wire_codec_sbe/src/lib.rs": {
+      "lines": 94,
+      "functions": 88.89
+    },
+    "server/core/crates/protocol/wire_codec_sbe/src/scalar.rs": {
+      "lines": 83.5,
+      "functions": 83.33
+    },
+    "server/core/crates/protocol/wire_codec_sbe/src/test_support.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/shared/data-model/src/config/pipeline_config.rs": {
+      "lines": 56,
+      "functions": 50
+    },
+    "server/core/crates/shared/data-model/src/config/transport_config.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/shared/data-model/src/device.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/core/crates/shared/data-model/src/device_tree/decl.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/core/crates/shared/data-model/src/device_tree/error.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/core/crates/shared/data-model/src/device_tree/identity.rs": {
+      "lines": 6.9,
+      "functions": 8.33
+    },
+    "server/core/crates/shared/data-model/src/device_tree/policy.rs": {
+      "lines": 5.26,
+      "functions": 7.69
+    },
+    "server/core/crates/shared/data-model/src/device_tree/state.rs": {
+      "lines": 29.79,
+      "functions": 25
+    },
+    "server/core/crates/shared/data-model/src/form_hints.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/shared/data-model/src/frame.rs": {
+      "lines": 91.67,
+      "functions": 87.5
+    },
+    "server/core/crates/shared/data-model/src/ids.rs": {
+      "lines": 91.72,
+      "functions": 88.24
+    },
+    "server/core/crates/shared/data-model/src/interface.rs": {
+      "lines": 93.48,
+      "functions": 89.47
+    },
+    "server/core/crates/shared/data-model/src/model_descriptor.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/shared/data-model/src/panel_descriptor.rs": {
+      "lines": 60.87,
+      "functions": 100
+    },
+    "server/core/crates/shared/data-model/src/simulation.rs": {
+      "lines": 87.5,
+      "functions": 87.5
+    },
+    "server/core/crates/shared/data-model/src/structured.rs": {
+      "lines": 96.33,
+      "functions": 100
+    },
+    "server/core/crates/shared/data-model/src/widget_template.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/shared/error/src/ai.rs": {
+      "lines": 40,
+      "functions": 100
+    },
+    "server/core/crates/shared/error/src/compile.rs": {
+      "lines": 74.07,
+      "functions": 81.82
+    },
+    "server/core/crates/shared/error/src/config.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/shared/error/src/lib.rs": {
+      "lines": 48.65,
+      "functions": 54.55
+    },
+    "server/core/crates/shared/error/src/port.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/core/crates/shared/error/src/protocol.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/core/crates/shared/error/src/transport.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/core/crates/shared/flow/src/lib.rs": {
+      "lines": 31.58,
+      "functions": 25
+    },
+    "server/core/crates/shared/subscription/src/lib.rs": {
+      "lines": 78.57,
+      "functions": 66.67
+    },
+    "server/core/crates/shared/subscription/src/manager.rs": {
+      "lines": 85,
+      "functions": 80
+    },
+    "server/core/crates/shared/wire/src/document.rs": {
+      "lines": 88.52,
+      "functions": 83.33
+    },
+    "server/core/crates/shared/wire/src/error.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/shared/wire/src/limits.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/shared/wire/src/path.rs": {
+      "lines": 96.93,
+      "functions": 89.47
+    },
+    "server/core/crates/shared/wire/src/registry.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/shared/wire/src/schema.rs": {
+      "lines": 98.08,
+      "functions": 87.5
+    },
+    "server/core/crates/shared/wire/src/source.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/shared/wire/src/value.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/vehicle/can/src/can_buffer.rs": {
+      "lines": 92.31,
+      "functions": 86.67
+    },
+    "server/core/crates/vehicle/can/src/can_filter.rs": {
+      "lines": 67.14,
+      "functions": 66.67
+    },
+    "server/core/crates/vehicle/can/src/can_frame.rs": {
+      "lines": 99.27,
+      "functions": 100
+    },
+    "server/core/crates/vehicle/can/src/can_load_stats.rs": {
+      "lines": 96.23,
+      "functions": 100
+    },
+    "server/core/crates/vehicle/can/src/can_model.rs": {
+      "lines": 86.75,
+      "functions": 88.89
+    },
+    "server/core/crates/vehicle/can/src/test_data.rs": {
+      "lines": 28.92,
+      "functions": 30
+    },
+    "server/core/crates/vehicle/diagnostic/src/config.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/core/crates/vehicle/diagnostic/src/message.rs": {
+      "lines": 75,
+      "functions": 100
+    },
+    "server/core/crates/vehicle/diagnostic/src/obd.rs": {
+      "lines": 72.09,
+      "functions": 100
+    },
+    "server/core/crates/vehicle/diagnostic/src/uds.rs": {
+      "lines": 51.85,
+      "functions": 100
+    },
+    "server/data/crates/data/bus/src/actor.rs": {
+      "lines": 78.95,
+      "functions": 100
+    },
+    "server/data/crates/data/bus/src/adaptive.rs": {
+      "lines": 76.64,
+      "functions": 66.67
+    },
+    "server/data/crates/data/bus/src/bus.rs": {
+      "lines": 79,
+      "functions": 72
+    },
+    "server/data/crates/data/bus/src/types.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/data/dataflow/src/condition.rs": {
+      "lines": 98.46,
+      "functions": 100
+    },
+    "server/data/crates/data/dataflow/src/flow.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/data/dataflow/src/operator.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/data/crates/data/dataflow/src/sample.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/data/dataflow/src/sink.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/data/dataflow/src/source.rs": {
+      "lines": 83.33,
+      "functions": 75
+    },
+    "server/data/crates/data/recording/src/backend/duckdb.rs": {
+      "lines": 77.61,
+      "functions": 80.65
+    },
+    "server/data/crates/data/recording/src/backend/duckdb_read_sql.rs": {
+      "lines": 84.19,
+      "functions": 95
+    },
+    "server/data/crates/data/recording/src/backend/duckdb_sql.rs": {
+      "lines": 80.36,
+      "functions": 81.48
+    },
+    "server/data/crates/data/recording/src/backend/mod.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/data/recording/src/codec.rs": {
+      "lines": 85.12,
+      "functions": 57.14
+    },
+    "server/data/crates/data/recording/src/export.rs": {
+      "lines": 94.82,
+      "functions": 94.12
+    },
+    "server/data/crates/data/recording/src/hub.rs": {
+      "lines": 84.06,
+      "functions": 92
+    },
+    "server/data/crates/data/recording/src/hub/fault.rs": {
+      "lines": 42.31,
+      "functions": 28.57
+    },
+    "server/data/crates/data/recording/src/hub/guard.rs": {
+      "lines": 90.91,
+      "functions": 100
+    },
+    "server/data/crates/data/recording/src/hub/ingest.rs": {
+      "lines": 62.77,
+      "functions": 88.89
+    },
+    "server/data/crates/data/recording/src/hub/query.rs": {
+      "lines": 91.57,
+      "functions": 81.25
+    },
+    "server/data/crates/data/recording/src/hub/spawn.rs": {
+      "lines": 87.29,
+      "functions": 83.33
+    },
+    "server/data/crates/data/recording/src/hub/state.rs": {
+      "lines": 59.66,
+      "functions": 61.54
+    },
+    "server/data/crates/data/recording/src/hub/wedge.rs": {
+      "lines": 93.89,
+      "functions": 85.71
+    },
+    "server/data/crates/data/recording/src/lib.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/data/recording/src/maintenance.rs": {
+      "lines": 80.69,
+      "functions": 80
+    },
+    "server/data/crates/data/recording/src/model.rs": {
+      "lines": 89.29,
+      "functions": 100
+    },
+    "server/data/crates/data/recording/src/read_model.rs": {
+      "lines": 61.54,
+      "functions": 61.54
+    },
+    "server/data/crates/data/recording/src/repair.rs": {
+      "lines": 84.08,
+      "functions": 86.67
+    },
+    "server/data/crates/data/recording/src/schema.rs": {
+      "lines": 95,
+      "functions": 100
+    },
+    "server/data/crates/data/recording/src/store.rs": {
+      "lines": 90.91,
+      "functions": 95.24
+    },
+    "server/data/crates/data/recording/src/writer.rs": {
+      "lines": 90.27,
+      "functions": 85.71
+    },
+    "server/data/crates/data/recording/src/writer/channel.rs": {
+      "lines": 88.03,
+      "functions": 92
+    },
+    "server/data/crates/data/recording/src/writer/worker.rs": {
+      "lines": 70.68,
+      "functions": 48.48
+    },
+    "server/data/crates/graph/eval/src/eval/accessors.rs": {
+      "lines": 52.08,
+      "functions": 44.44
+    },
+    "server/data/crates/graph/eval/src/eval/materialize.rs": {
+      "lines": 28.79,
+      "functions": 28.57
+    },
+    "server/data/crates/graph/eval/src/eval/ops.rs": {
+      "lines": 62.78,
+      "functions": 75
+    },
+    "server/data/crates/graph/eval/src/eval_ports.rs": {
+      "lines": 93.75,
+      "functions": 100
+    },
+    "server/data/crates/graph/eval/src/eval_str.rs": {
+      "lines": 88.24,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph-testkit/src/lib.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/compile.rs": {
+      "lines": 90.42,
+      "functions": 83.87
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/custom.rs": {
+      "lines": 64.29,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/decoder_source.rs": {
+      "lines": 83.33,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/filter.rs": {
+      "lines": 95,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/ifft.rs": {
+      "lines": 83.33,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/input.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/math.rs": {
+      "lines": 75,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/mod.rs": {
+      "lines": 86.67,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/protocol_source.rs": {
+      "lines": 87.5,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/str.rs": {
+      "lines": 90.57,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/text_input.rs": {
+      "lines": 85.71,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/textout.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/data/crates/graph/graph/src/evaluate/arms/trigger.rs": {
+      "lines": 95.12,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/evaluate/mod.rs": {
+      "lines": 98.16,
+      "functions": 100
+    },
+    "server/data/crates/graph/graph/src/provenance.rs": {
+      "lines": 82.35,
+      "functions": 90.91
+    },
+    "server/data/crates/graph/hir/src/errors.rs": {
+      "lines": 75,
+      "functions": 100
+    },
+    "server/data/crates/graph/hir/src/hir.rs": {
+      "lines": 91.1,
+      "functions": 88.89
+    },
+    "server/data/crates/graph/kind/src/kind.rs": {
+      "lines": 37.5,
+      "functions": 50
+    },
+    "server/data/crates/graph/kind/src/lib.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/kind/src/math_op.rs": {
+      "lines": 96.77,
+      "functions": 100
+    },
+    "server/data/crates/graph/kind/src/origin.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/kind/src/ports.rs": {
+      "lines": 69.23,
+      "functions": 85.71
+    },
+    "server/data/crates/graph/kind/src/spec.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/kind/src/str_op.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/kind/src/str_op/eval.rs": {
+      "lines": 97.75,
+      "functions": 100
+    },
+    "server/data/crates/graph/kind/src/str_op/input_ports.rs": {
+      "lines": 88.24,
+      "functions": 100
+    },
+    "server/data/crates/graph/lower/src/kinds/custom.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/lower/src/kinds/decoder_source.rs": {
+      "lines": 96.3,
+      "functions": 100
+    },
+    "server/data/crates/graph/lower/src/kinds/filter.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/lower/src/kinds/ifft.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/lower/src/kinds/input.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/lower/src/kinds/math.rs": {
+      "lines": 94.12,
+      "functions": 66.67
+    },
+    "server/data/crates/graph/lower/src/kinds/mod.rs": {
+      "lines": 85,
+      "functions": 100
+    },
+    "server/data/crates/graph/lower/src/kinds/protocol_source.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/lower/src/kinds/str.rs": {
+      "lines": 94.44,
+      "functions": 100
+    },
+    "server/data/crates/graph/lower/src/kinds/text_input.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/lower/src/kinds/textout.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/data/crates/graph/lower/src/kinds/trigger.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/lower/src/lower.rs": {
+      "lines": 96.5,
+      "functions": 94.44
+    },
+    "server/data/crates/graph/lower/src/ops.rs": {
+      "lines": 35,
+      "functions": 50
+    },
+    "server/data/crates/graph/lower/src/units.rs": {
+      "lines": 98.61,
+      "functions": 100
+    },
+    "server/data/crates/graph/node_document/src/document.rs": {
+      "lines": 44.74,
+      "functions": 25
+    },
+    "server/data/crates/graph/node_document/src/widget_document.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/data/crates/graph/node_document/src/widgets/command.rs": {
+      "lines": 98.72,
+      "functions": 90
+    },
+    "server/data/crates/graph/node_document/src/widgets/controls.rs": {
+      "lines": 80.85,
+      "functions": 73.53
+    },
+    "server/data/crates/graph/node_document/src/widgets/custom.rs": {
+      "lines": 36.36,
+      "functions": 66.67
+    },
+    "server/data/crates/graph/node_document/src/widgets/display_normalize.rs": {
+      "lines": 79.35,
+      "functions": 82.35
+    },
+    "server/data/crates/graph/node_document/src/widgets/display_params.rs": {
+      "lines": 83.33,
+      "functions": 83.33
+    },
+    "server/data/crates/graph/node_document/src/widgets/displays.rs": {
+      "lines": 83.47,
+      "functions": 80.77
+    },
+    "server/data/crates/graph/node_document/src/widgets/math_text.rs": {
+      "lines": 54.61,
+      "functions": 68
+    },
+    "server/data/crates/graph/node_document/src/widgets/mod.rs": {
+      "lines": 90.4,
+      "functions": 83.33
+    },
+    "server/data/crates/graph/node_document/src/widgets/panel_spec.rs": {
+      "lines": 98,
+      "functions": 100
+    },
+    "server/data/crates/graph/node_document/src/widgets/params.rs": {
+      "lines": 96.77,
+      "functions": 100
+    },
+    "server/data/crates/graph/node_document/src/widgets/params_math_text.rs": {
+      "lines": 82.61,
+      "functions": 85.71
+    },
+    "server/data/crates/graph/node_document/src/widgets/signal.rs": {
+      "lines": 32.05,
+      "functions": 27.78
+    },
+    "server/data/crates/graph/node_document/src/widgets/trigger.rs": {
+      "lines": 95,
+      "functions": 84.62
+    },
+    "server/data/crates/graph/plane/src/byte_plan.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/plane/src/plane.rs": {
+      "lines": 96.18,
+      "functions": 95.45
+    },
+    "server/data/crates/graph/trigger/src/trigger/matcher.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/trigger/src/trigger/pattern.rs": {
+      "lines": 75,
+      "functions": 100
+    },
+    "server/data/crates/graph/trigger/src/trigger/state.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/trigger/src/trigger/test_util.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/graph/trigger/src/trigger/types.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/data/crates/signal/filter/src/filter.rs": {
+      "lines": 88.1,
+      "functions": 100
+    },
+    "server/data/crates/signal/gpu/src/device.rs": {
+      "lines": 87.72,
+      "functions": 75
+    },
+    "server/data/crates/signal/gpu/src/engine.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/data/crates/signal/gpu/src/envelope.rs": {
+      "lines": 98.17,
+      "functions": 77.78
+    },
+    "server/data/crates/signal/gpu/src/pool.rs": {
+      "lines": 81.13,
+      "functions": 73.33
+    },
+    "server/data/crates/signal/measurement/src/autoset.rs": {
+      "lines": 96.77,
+      "functions": 100
+    },
+    "server/data/crates/signal/measurement/src/period.rs": {
+      "lines": 89.72,
+      "functions": 100
+    },
+    "server/data/crates/signal/measurement/src/stats.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/signal/raw-data/src/raw.rs": {
+      "lines": 99.24,
+      "functions": 100
+    },
+    "server/data/crates/signal/raw-data/src/raw_filter.rs": {
+      "lines": 98.77,
+      "functions": 100
+    },
+    "server/data/crates/signal/spectrum/src/autocorr.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/signal/spectrum/src/ifft.rs": {
+      "lines": 78.79,
+      "functions": 75
+    },
+    "server/data/crates/signal/spectrum/src/spectrum.rs": {
+      "lines": 68.54,
+      "functions": 63.16
+    },
+    "server/data/crates/signal/spectrum/src/streaming.rs": {
+      "lines": 93.87,
+      "functions": 94.44
+    },
+    "server/data/crates/signal/spectrum/src/window.rs": {
+      "lines": 96.43,
+      "functions": 100
+    },
+    "server/data/crates/signal/waveform/src/data_buffer.rs": {
+      "lines": 98.48,
+      "functions": 100
+    },
+    "server/data/crates/signal/waveform/src/derived.rs": {
+      "lines": 97.27,
+      "functions": 100
+    },
+    "server/data/crates/signal/waveform/src/envelope.rs": {
+      "lines": 78.38,
+      "functions": 50
+    },
+    "server/data/crates/signal/waveform/src/ring.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/data/crates/signal/waveform/src/tier.rs": {
+      "lines": 95.86,
+      "functions": 100
+    },
+    "server/data/crates/signal/waveform/src/window/downsample.rs": {
+      "lines": 92.06,
+      "functions": 100
+    },
+    "server/data/crates/signal/waveform/src/window/query.rs": {
+      "lines": 89.97,
+      "functions": 92.59
+    },
+    "server/data/crates/signal/waveform/src/window/snapshot.rs": {
+      "lines": 82.16,
+      "functions": 72
+    },
+    "server/physical/crates/protocol/acquisition/src/backend.rs": {
+      "lines": 71.12,
+      "functions": 65.52
+    },
+    "server/physical/crates/protocol/acquisition/src/config.rs": {
+      "lines": 97.06,
+      "functions": 100
+    },
+    "server/physical/crates/protocol/acquisition/src/handle.rs": {
+      "lines": 73.49,
+      "functions": 69.57
+    },
+    "server/physical/crates/protocol/acquisition/src/interface.rs": {
+      "lines": 95.52,
+      "functions": 95
+    },
+    "server/physical/crates/protocol/acquisition/src/lanes.rs": {
+      "lines": 78.1,
+      "functions": 80.95
+    },
+    "server/physical/crates/protocol/acquisition/src/lib.rs": {
+      "lines": 86.05,
+      "functions": 83.33
+    },
+    "server/physical/crates/protocol/acquisition/src/operation.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/physical/crates/protocol/acquisition/src/plan.rs": {
+      "lines": 93.22,
+      "functions": 50
+    },
+    "server/physical/crates/protocol/acquisition/src/plane.rs": {
+      "lines": 47.5,
+      "functions": 53.85
+    },
+    "server/physical/crates/protocol/acquisition/src/point_simulation.rs": {
+      "lines": 62.05,
+      "functions": 60
+    },
+    "server/physical/crates/protocol/acquisition/src/pump.rs": {
+      "lines": 79.17,
+      "functions": 88.89
+    },
+    "server/physical/crates/protocol/acquisition/src/session.rs": {
+      "lines": 81.4,
+      "functions": 100
+    },
+    "server/physical/crates/protocol/acquisition/src/simulation.rs": {
+      "lines": 76.39,
+      "functions": 83.33
+    },
+    "server/physical/crates/protocol/acquisition/src/static_catalog.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/physical/crates/protocol/acquisition/src/stores.rs": {
+      "lines": 33.85,
+      "functions": 27.27
+    },
+    "server/physical/crates/protocol/acquisition/src/supervisor.rs": {
+      "lines": 86.32,
+      "functions": 90.91
+    },
+    "server/physical/crates/protocol/acquisition/src/transport_interface.rs": {
+      "lines": 84.96,
+      "functions": 83.33
+    },
+    "server/physical/crates/protocol/acquisition/src/unconfigured.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/physical/crates/transport/automotive/src/bridge.rs": {
+      "lines": 93.15,
+      "functions": 90
+    },
+    "server/physical/crates/transport/automotive/src/interface.rs": {
+      "lines": 53.27,
+      "functions": 41.67
+    },
+    "server/physical/crates/transport/automotive/src/node_driver.rs": {
+      "lines": 79.92,
+      "functions": 73.68
+    },
+    "server/physical/crates/transport/automotive_diag/src/engine.rs": {
+      "lines": 67.35,
+      "functions": 53.85
+    },
+    "server/physical/crates/transport/automotive_diag/src/interface.rs": {
+      "lines": 8.82,
+      "functions": 12.5
+    },
+    "server/physical/crates/transport/automotive_diag/src/node_driver.rs": {
+      "lines": 80.63,
+      "functions": 75
+    },
+    "server/physical/crates/transport/automotive_isotp/src/constants.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/physical/crates/transport/automotive_isotp/src/error.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/physical/crates/transport/automotive_isotp/src/interface.rs": {
+      "lines": 17.65,
+      "functions": 20
+    },
+    "server/physical/crates/transport/automotive_isotp/src/node_driver.rs": {
+      "lines": 73.91,
+      "functions": 67.57
+    },
+    "server/physical/crates/transport/automotive_isotp/src/rx.rs": {
+      "lines": 19.46,
+      "functions": 37.5
+    },
+    "server/physical/crates/transport/automotive_isotp/src/session.rs": {
+      "lines": 97.83,
+      "functions": 100
+    },
+    "server/physical/crates/transport/automotive_isotp/src/state.rs": {
+      "lines": 18.52,
+      "functions": 33.33
+    },
+    "server/physical/crates/transport/automotive_isotp/src/task.rs": {
+      "lines": 85.71,
+      "functions": 100
+    },
+    "server/physical/crates/transport/automotive_isotp/src/tx.rs": {
+      "lines": 40.77,
+      "functions": 44.44
+    },
+    "server/physical/crates/transport/can-transport/src/candle.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/physical/crates/transport/can-transport/src/lib.rs": {
+      "lines": 40.26,
+      "functions": 33.33
+    },
+    "server/physical/crates/transport/can-transport/src/slcan.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/physical/crates/transport/device-tree/src/builtin.rs": {
+      "lines": 80.15,
+      "functions": 86.36
+    },
+    "server/physical/crates/transport/device-tree/src/capability.rs": {
+      "lines": 94.42,
+      "functions": 88.89
+    },
+    "server/physical/crates/transport/device-tree/src/driver.rs": {
+      "lines": 72.12,
+      "functions": 62.86
+    },
+    "server/physical/crates/transport/device-tree/src/error.rs": {
+      "lines": 50,
+      "functions": 50
+    },
+    "server/physical/crates/transport/device-tree/src/production.rs": {
+      "lines": 87.72,
+      "functions": 71.43
+    },
+    "server/physical/crates/transport/device-tree/src/production_backend.rs": {
+      "lines": 54.01,
+      "functions": 46.34
+    },
+    "server/physical/crates/transport/device-tree/src/production_support.rs": {
+      "lines": 75.81,
+      "functions": 78.38
+    },
+    "server/physical/crates/transport/device-tree/src/protocol_engine.rs": {
+      "lines": 93.62,
+      "functions": 85.71
+    },
+    "server/physical/crates/transport/device-tree/src/registry.rs": {
+      "lines": 69.79,
+      "functions": 52.94
+    },
+    "server/physical/crates/transport/device-tree/src/runtime.rs": {
+      "lines": 94.03,
+      "functions": 97.37
+    },
+    "server/physical/crates/transport/device-tree/src/self_handle.rs": {
+      "lines": 85,
+      "functions": 80
+    },
+    "server/physical/crates/transport/device-tree/src/simulation.rs": {
+      "lines": 85.91,
+      "functions": 73.68
+    },
+    "server/physical/crates/transport/device-tree/src/source_ports.rs": {
+      "lines": 65.71,
+      "functions": 54.17
+    },
+    "server/physical/crates/transport/device-tree/src/source_runtime.rs": {
+      "lines": 89.69,
+      "functions": 85.71
+    },
+    "server/physical/crates/transport/device-tree/src/source_support.rs": {
+      "lines": 93.51,
+      "functions": 84.62
+    },
+    "server/physical/crates/transport/modbus-adapter/src/client.rs": {
+      "lines": 77.87,
+      "functions": 79.59
+    },
+    "server/physical/crates/transport/modbus-adapter/src/codec.rs": {
+      "lines": 54.21,
+      "functions": 50
+    },
+    "server/physical/crates/transport/modbus-adapter/src/config.rs": {
+      "lines": 45.92,
+      "functions": 50
+    },
+    "server/physical/crates/transport/modbus-adapter/src/descriptor.rs": {
+      "lines": 97.77,
+      "functions": 100
+    },
+    "server/physical/crates/transport/modbus-adapter/src/factory.rs": {
+      "lines": 71.07,
+      "functions": 62.96
+    },
+    "server/physical/crates/transport/modbus-adapter/src/interface.rs": {
+      "lines": 72.22,
+      "functions": 58.82
+    },
+    "server/physical/crates/transport/modbus-adapter/src/node_driver.rs": {
+      "lines": 72.95,
+      "functions": 72.22
+    },
+    "server/physical/crates/transport/modbus-adapter/src/planner.rs": {
+      "lines": 88,
+      "functions": 72.73
+    },
+    "server/physical/crates/transport/modbus-adapter/src/read.rs": {
+      "lines": 82.59,
+      "functions": 60.87
+    },
+    "server/physical/crates/transport/modbus-adapter/src/write.rs": {
+      "lines": 43.1,
+      "functions": 26.32
+    },
+    "server/physical/crates/transport/network/src/lib.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/physical/crates/transport/network/src/tcp.rs": {
+      "lines": 87.3,
+      "functions": 85.71
+    },
+    "server/physical/crates/transport/network/src/udp.rs": {
+      "lines": 68.75,
+      "functions": 66.67
+    },
+    "server/physical/crates/transport/s7-adapter/src/client.rs": {
+      "lines": 85.78,
+      "functions": 86.36
+    },
+    "server/physical/crates/transport/s7-adapter/src/codec.rs": {
+      "lines": 80,
+      "functions": 58.33
+    },
+    "server/physical/crates/transport/s7-adapter/src/config.rs": {
+      "lines": 71.09,
+      "functions": 82.35
+    },
+    "server/physical/crates/transport/s7-adapter/src/descriptor.rs": {
+      "lines": 95.5,
+      "functions": 100
+    },
+    "server/physical/crates/transport/s7-adapter/src/factory.rs": {
+      "lines": 98.36,
+      "functions": 91.67
+    },
+    "server/physical/crates/transport/s7-adapter/src/interface.rs": {
+      "lines": 69.5,
+      "functions": 64
+    },
+    "server/physical/crates/transport/s7-adapter/src/node_driver.rs": {
+      "lines": 83.17,
+      "functions": 75
+    },
+    "server/physical/crates/transport/s7-adapter/src/planner.rs": {
+      "lines": 91.11,
+      "functions": 87.5
+    },
+    "server/physical/crates/transport/s7-adapter/src/read.rs": {
+      "lines": 75.12,
+      "functions": 55
+    },
+    "server/physical/crates/transport/s7-adapter/src/write.rs": {
+      "lines": 56.47,
+      "functions": 27.78
+    },
+    "server/physical/crates/transport/serial/src/lib.rs": {
+      "lines": 51.28,
+      "functions": 30
+    },
+    "server/physical/crates/transport/serial/src/linux_ports.rs": {
+      "lines": 86.49,
+      "functions": 63.64
+    },
+    "server/physical/crates/transport/serial/src/macos_ports.rs": {
+      "lines": 28.35,
+      "functions": 36.84
+    },
+    "server/physical/crates/transport/serial/src/ports.rs": {
+      "lines": 56.18,
+      "functions": 53.85
+    },
+    "server/physical/crates/transport/serial/src/serial.rs": {
+      "lines": 0,
+      "functions": 0
+    },
+    "server/physical/crates/transport/transport/src/byte_simulation.rs": {
+      "lines": 73.25,
+      "functions": 73.91
+    },
+    "server/physical/crates/transport/transport/src/device_driver.rs": {
+      "lines": 95.16,
+      "functions": 90.91
+    },
+    "server/physical/crates/transport/transport/src/device_factory.rs": {
+      "lines": 88.58,
+      "functions": 77.42
+    },
+    "server/physical/crates/transport/transport/src/interfaces.rs": {
+      "lines": 100,
+      "functions": 100
+    },
+    "server/physical/crates/transport/transport/src/request_interface.rs": {
+      "lines": 90.27,
+      "functions": 77.78
+    },
+    "server/physical/crates/transport/transport/src/test_data.rs": {
+      "lines": 74.59,
+      "functions": 68.75
     }
   }
 }

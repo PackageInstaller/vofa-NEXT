@@ -79,6 +79,21 @@ describe('coverage judgement', () => {
     ]);
   });
 
+  it('skips a metric the report does not measure', () => {
+    // LLVM exports lines and functions only; a baseline that also carries branches and
+    // statements must not turn their absence into a silent 0% against a recorded floor.
+    const recorded = {
+      'server/crates/graph/kind/src/widgets.rs': { lines: 90, functions: 90 },
+    };
+    const findings = judgeCoverage(
+      { 'server/crates/graph/kind/src/widgets.rs': { lines: 89 } },
+      recorded,
+    );
+    expect(findings).toEqual([
+      { path: 'server/crates/graph/kind/src/widgets.rs', metric: 'lines', actual: 89, floor: 90 },
+    ]);
+  });
+
   it('ignores a file with nothing to measure', () => {
     expect(
       judgeCoverage({ 'client/src/lib/templates/empty.ts': { lines: 0, branches: 0, functions: 0, statements: 0 } }, {}),
