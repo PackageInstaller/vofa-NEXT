@@ -150,11 +150,16 @@ Change the registry, then run `pnpm check:ci-gates --fix`.
 <!-- lissio-gates:end -->
 
 That list is what CI runs — all of it, not a subset. Do not treat a green subset
-as a green build. Two notes that do not fit the one-line form above:
+as a green build. Three notes that do not fit the one-line form above:
 
 - `pnpm generate:contracts` is a local step, not a gate: run it after a wire
   change to regenerate `client/src/types/generated`; CI verifies its output with
   `check:contracts`.
+- `pnpm generate:templates` is the same kind of local step for the widget
+  template catalog: run it after changing a widget definition, a palette section,
+  or a panel spec, then commit
+  `client/src/test/fixtures/template_catalog.json`; `check:model-catalog`
+  regenerates it and compares.
 - `pnpm perf:baseline` overwrites the committed render baseline and is only for
   an intended change; the gate itself only compares.
 

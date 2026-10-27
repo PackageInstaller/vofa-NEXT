@@ -9,8 +9,10 @@
 //!   3. the test-catalog fixture's widget kind set exactly matches the UI registry (rendererKey
 //!      domain) — adding a backend variant/kind and missing it on either side shows up here.
 
-import { readFileSync, readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -92,6 +94,60 @@ if (kindsFromList.length === 0) {
   if (!missingInFixture.length && !extraInFixture.length) {
     ok(`widget kind coverage matches (${registryKinds.length} kinds)`);
   }
+}
+
+// ---- 4. Template catalog fixture ↔ UI registry kind set ----
+
+const templateFixturePath = join(fixtureDir, 'template_catalog.json');
+let templateFixture = null;
+try {
+  templateFixture = JSON.parse(readFileSync(templateFixturePath, 'utf8'));
+} catch (error) {
+  fail(`template_catalog.json is missing or invalid: ${error.message} — run pnpm generate:templates`);
+}
+if (templateFixture) {
+  const templateKinds = (templateFixture.widgets ?? []).map((widget) => widget.kind);
+  const registry = new Set(registryKinds);
+  const missing = registryKinds.filter((kind) => !templateKinds.includes(kind));
+  const extra = templateKinds.filter((kind) => !registry.has(kind));
+  if (missing.length) fail(`template catalog is missing widgets the UI implements: ${missing.join(', ')}`);
+  if (extra.length) fail(`template catalog has widgets the UI does not implement: ${extra.join(', ')}`);
+  const paletteIds = new Set((templateFixture.palette ?? []).map((section) => section.id));
+  for (const widget of templateFixture.widgets ?? []) {
+    // 控件落在前端不渲染的分区 = 用户在调色板里永远找不到它
+    if (!paletteIds.has(widget.category)) {
+      fail(`${widget.kind}: category ${widget.category} has no palette section`);
+    }
+  }
+  if (!missing.length && !extra.length) {
+    ok(`template catalog covers the UI registry (${templateKinds.length} widgets, ${paletteIds.size} sections)`);
+  }
+}
+
+// ---- 5. Template fixture is what the backend projects right now ----
+
+const generatedFixture = join(mkdtempSync(join(tmpdir(), 'lissio-templates-')), 'template_catalog.json');
+try {
+  const result = spawnSync('node', [join(root, 'scripts', 'generate-templates.mjs')], {
+    cwd: root,
+    stdio: ['ignore', 'ignore', 'inherit'],
+    env: { ...process.env, LISSIO_TEMPLATES_OUT: generatedFixture },
+  });
+  if (result.status !== 0) {
+    fail('template catalog regeneration failed');
+  } else if (!existsSync(templateFixturePath)) {
+    fail('client/src/test/fixtures/template_catalog.json is missing — run pnpm generate:templates');
+  } else {
+    const committed = readFileSync(templateFixturePath, 'utf8');
+    const regenerated = readFileSync(generatedFixture, 'utf8');
+    if (committed !== regenerated) {
+      fail('template catalog fixture is stale — run pnpm generate:templates');
+    } else {
+      ok('template catalog fixture matches the backend projection');
+    }
+  }
+} finally {
+  rmSync(dirname(generatedFixture), { recursive: true, force: true });
 }
 
 if (failed) {
