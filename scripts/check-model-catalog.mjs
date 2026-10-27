@@ -6,8 +6,9 @@
 //! validates the frontend consumption surface and the exported fixtures:
 //!   1. golden fixtures parse, NodeDocument kinds are valid, model id/variants unique;
 //!   2. the catalog contract version agrees between the Rust source and the frontend store constant;
-//!   3. the test-catalog fixture's widget kind set exactly matches the UI registry (rendererKey
-//!      domain) — adding a backend variant/kind and missing it on either side shows up here.
+//!   3. every renderer / icon / panel-renderer key the template catalog declares is implemented
+//!      by the client, and the client implements nothing the catalog does not declare;
+//!   4. the test-catalog fixture's widget kind set matches the template catalog's kind set.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
@@ -70,11 +71,109 @@ if (!rustVersion || !tsVersion) {
   ok(`catalog contract version matches (v${rustVersion})`);
 }
 
-// ---- 3. Test-catalog fixture ↔ UI registry kind set ----
+// ---- 3. Template fixture ↔ client implementation registries ----
+//
+// 模板目录是「有哪些控件 / 面板」的唯一权威, 客户端只提供实现。这里比对两侧的键:
+// 模板声明了一个客户端没有的键 → 该控件会显示为不支持; 客户端有模板没声明的键 →
+// 前端还在维护一份后端不认的清单。两种都必须失败。
 
-const registryTs = readFileSync(join(root, 'client', 'src', 'components', 'widgets', 'registry.ts'), 'utf8');
-const registryKinds = [...registryTs.matchAll(/^(?:\s){2}([A-Za-z0-9]+): \w+Def,$/gm)].map((m) => m[1]);
-if (registryKinds.length === 0) fail('could not parse the widget kind table from client/src/components/widgets/registry.ts');
+/// 读取一段 `export const NAME = { ... }` 里的顶层键 (支持 `Key,` / `Key: Value,` /
+/// `'kebab-key': Value,` 三种写法)。
+function keysOfObject(source, marker, file) {
+  const start = source.indexOf(marker);
+  if (start < 0) {
+    fail(`${file}: could not find ${marker}`);
+    return null;
+  }
+  const open = source.indexOf('{', start);
+  const close = source.indexOf('\n};', open) >= 0 ? source.indexOf('\n};', open) : source.indexOf('\n} as const', open);
+  if (open < 0 || close < 0) {
+    fail(`${file}: could not delimit ${marker}`);
+    return null;
+  }
+  const keys = [];
+  for (const line of source.slice(open + 1, close).split('\n')) {
+    const match = /^\s{2}(?:'([^']+)'|"([^"]+)"|([A-Za-z0-9_-]+))\s*[:,]/.exec(line);
+    if (match) keys.push(match[1] ?? match[2] ?? match[3]);
+  }
+  if (keys.length === 0) fail(`${file}: ${marker} has no entries`);
+  return keys;
+}
+
+const rendererRegistryFile = join(root, 'client', 'src', 'components', 'widgets', 'rendererRegistry.ts');
+const iconRegistryFile = join(root, 'client', 'src', 'lib', 'icons', 'registry.ts');
+const panelRendererFile = join(root, 'client', 'src', 'components', 'panels', 'panelRenderers.ts');
+
+const rendererKeys = keysOfObject(readFileSync(rendererRegistryFile, 'utf8'), 'WIDGET_RENDERERS', rendererRegistryFile);
+const iconKeys = keysOfObject(readFileSync(iconRegistryFile, 'utf8'), 'ICONS', iconRegistryFile);
+const panelRendererKeys = keysOfObject(readFileSync(panelRendererFile, 'utf8'), 'PANEL_RENDERERS', panelRendererFile);
+
+/// 两个集合必须互相覆盖, 差异各报一条。
+///
+/// `strict` 控制是否也禁止客户端多出实现。渲染器必须严格对齐 —— 一个模板不认识的
+/// 渲染器就是一份后端不认的元数据。图标放宽: 外壳 tab 与协议/解码条目是客户端自有
+/// 界面, 它们的图标键天然不在模板里。
+function compareSets(label, declared, implemented, describe, strict = true) {
+  const declaredSet = new Set(declared);
+  const implementedSet = new Set(implemented);
+  const missing = declared.filter((key) => !implementedSet.has(key));
+  const extra = strict ? implemented.filter((key) => !declaredSet.has(key)) : [];
+  if (missing.length) fail(`${label}: no client implementation for ${missing.join(', ')} ${describe}`);
+  if (extra.length) fail(`${label}: client implements ${extra.join(', ')}, which the template catalog does not declare`);
+  return missing.length === 0 && extra.length === 0;
+}
+
+const templateFixturePath = join(fixtureDir, 'template_catalog.json');
+let templateFixture = null;
+try {
+  templateFixture = JSON.parse(readFileSync(templateFixturePath, 'utf8'));
+} catch (error) {
+  fail(`template_catalog.json is missing or invalid: ${error.message} — run pnpm generate:templates`);
+}
+
+if (templateFixture && rendererKeys && iconKeys && panelRendererKeys) {
+  const widgets = templateFixture.widgets ?? [];
+  const panels = [
+    ...widgets.flatMap((widget) => (widget.panel ? [widget.panel] : [])),
+    ...(templateFixture.standalonePanels ?? []),
+  ];
+
+  const renderersOk = compareSets(
+    'template renderer keys',
+    widgets.map((widget) => widget.rendererKey),
+    rendererKeys,
+    '(add it to client/src/components/widgets/rendererRegistry.ts)'
+  );
+  const panelRenderersOk = compareSets(
+    'template panel renderer keys',
+    panels.map((panel) => panel.rendererKey),
+    panelRendererKeys,
+    '(add it to client/src/components/panels/panelRenderers.ts)'
+  );
+  const iconKeysOk = compareSets(
+    'template icon keys',
+    [...widgets, ...panels, ...(templateFixture.palette ?? [])].map((entry) => entry.iconKey),
+    iconKeys,
+    '(add it to client/src/lib/icons/registry.ts)',
+    false
+  );
+
+  const paletteIds = new Set((templateFixture.palette ?? []).map((section) => section.id));
+  for (const widget of widgets) {
+    // 控件落在前端不渲染的分区 = 用户在调色板里永远找不到它
+    if (!paletteIds.has(widget.category)) {
+      fail(`${widget.kind}: category ${widget.category} has no palette section`);
+    }
+  }
+
+  if (renderersOk && panelRenderersOk && iconKeysOk) {
+    ok(
+      `template catalog matches the client registries (${widgets.length} widgets, ${panels.length} panels, ${paletteIds.size} sections)`
+    );
+  }
+}
+
+// ---- 4. Test-catalog fixture ↔ template widget kinds ----
 
 const catalogTs = readFileSync(join(root, 'client', 'src', 'test', 'modelCatalog.ts'), 'utf8');
 const listStart = catalogTs.indexOf('WIDGET_TEST_KINDS = [');
@@ -84,43 +183,16 @@ const kindsFromList = listStart >= 0 && listEnd > listStart
   : [];
 if (kindsFromList.length === 0) {
   fail('could not parse WIDGET_TEST_KINDS from client/src/test/modelCatalog.ts');
-} else {
-  const registry = new Set(registryKinds);
-  const fixture = new Set(kindsFromList);
-  const missingInFixture = registryKinds.filter((k) => !fixture.has(k));
-  const extraInFixture = kindsFromList.filter((k) => !registry.has(k));
-  if (missingInFixture.length) fail(`test catalog is missing kinds present in the UI registry: ${missingInFixture.join(', ')}`);
-  if (extraInFixture.length) fail(`test catalog has kinds the UI registry does not implement: ${extraInFixture.join(', ')}`);
-  if (!missingInFixture.length && !extraInFixture.length) {
-    ok(`widget kind coverage matches (${registryKinds.length} kinds)`);
-  }
-}
-
-// ---- 4. Template catalog fixture ↔ UI registry kind set ----
-
-const templateFixturePath = join(fixtureDir, 'template_catalog.json');
-let templateFixture = null;
-try {
-  templateFixture = JSON.parse(readFileSync(templateFixturePath, 'utf8'));
-} catch (error) {
-  fail(`template_catalog.json is missing or invalid: ${error.message} — run pnpm generate:templates`);
-}
-if (templateFixture) {
+} else if (templateFixture) {
   const templateKinds = (templateFixture.widgets ?? []).map((widget) => widget.kind);
-  const registry = new Set(registryKinds);
-  const missing = registryKinds.filter((kind) => !templateKinds.includes(kind));
-  const extra = templateKinds.filter((kind) => !registry.has(kind));
-  if (missing.length) fail(`template catalog is missing widgets the UI implements: ${missing.join(', ')}`);
-  if (extra.length) fail(`template catalog has widgets the UI does not implement: ${extra.join(', ')}`);
-  const paletteIds = new Set((templateFixture.palette ?? []).map((section) => section.id));
-  for (const widget of templateFixture.widgets ?? []) {
-    // 控件落在前端不渲染的分区 = 用户在调色板里永远找不到它
-    if (!paletteIds.has(widget.category)) {
-      fail(`${widget.kind}: category ${widget.category} has no palette section`);
-    }
-  }
-  if (!missing.length && !extra.length) {
-    ok(`template catalog covers the UI registry (${templateKinds.length} widgets, ${paletteIds.size} sections)`);
+  const template = new Set(templateKinds);
+  const fixture = new Set(kindsFromList);
+  const missingInFixture = templateKinds.filter((kind) => !fixture.has(kind));
+  const extraInFixture = kindsFromList.filter((kind) => !template.has(kind));
+  if (missingInFixture.length) fail(`test catalog is missing kinds present in the template catalog: ${missingInFixture.join(', ')}`);
+  if (extraInFixture.length) fail(`test catalog has kinds the template catalog does not declare: ${extraInFixture.join(', ')}`);
+  if (!missingInFixture.length && !extraInFixture.length) {
+    ok(`test catalog kind set matches the template catalog (${templateKinds.length} kinds)`);
   }
 }
 
