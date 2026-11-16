@@ -6,15 +6,17 @@ Thumbs.db
 .idea/
 .vscode/
 *.sw?
+.mimocode/
 
 # Local development files
 .claude/
 .codex-build/
 .serena/
 .superpowers/
+.zcodeignore
 .zcode/
+.workbuddy/
 PLAN.md
-/docs/community/
 
 # Logs
 logs/
@@ -34,6 +36,9 @@ node_modules/
 # Frontend build output
 dist/
 dist-ssr/
+src-tauri/binaries/
+test-results/
+playwright-report/
 
 # Generated reports and promotional media
 /output/
@@ -47,3 +52,10 @@ dist-ssr/
 /src-tauri/perf.data*
 *.profraw
 media/
+
+# for gpuix reflactor
+third_party/
+
+# paper
+docs/paper/
+docs/experiments/

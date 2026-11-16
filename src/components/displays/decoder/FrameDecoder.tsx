@@ -17,8 +17,9 @@ import type {
   FrameDecoderManualResult,
 } from '../../../types';
 import { useAppStore } from '../../../store/appStore';
+import { errorText } from '../../../types/errors';
 import { api } from '../../../lib/tauri/tauri';
-import { t } from '../../../i18n';
+import { translate } from '../../../i18n';
 import { nanoid } from 'nanoid';
 import type {
   HistoryEntry,
@@ -36,6 +37,7 @@ import { BlockEditor } from './FrameDecoderBlockEditor';
 import { LiveModePanel } from './FrameDecoderLivePanel';
 import { ManualModePanel } from './FrameDecoderManualPanel';
 import { useNumericInputs } from '../../../lib/hooks/useNumericPort';
+import { reflowSpring, useFlipReorder } from '../../../lib/motion';
 
 interface FrameDecoderProps {
   widget: Extract<WidgetConfig, { kind: 'FrameDecoder' }>;
@@ -49,7 +51,7 @@ interface FrameDecoderProps {
 ///   manual 模式: 用户输入 HEX/ASCII → api.parseFrameDecoderInput (临时 FrameParser.parse_once)
 ///                → 返回 outputs + valid + consumedBytes → 前端显示
 ///
-/// 节点端口: 从 blocks 中 field/bitfield/length/id 块推导输出端口 (见 WidgetNode.getWidgetPorts)
+/// 节点端口: 由后端 describe 依 blocks 派生 (field/bitfield/length/id 块)
 export function FrameDecoder({ widget }: FrameDecoderProps) {
   const params = widget.params;
   const { id, blocks, mode } = params;
@@ -85,6 +87,13 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const dragIdRef = useRef<string | null>(null);
+  const blockListRef = useRef<HTMLDivElement>(null);
+
+  // 触发条件只编码块的顺序。展开/收起改变的是高度而非槽位, 由块自身的尺寸过渡负责。
+  useFlipReorder(blockListRef, blocks.map((b) => b.id).join('|'), {
+    keyAttribute: 'data-flip-key',
+    spring: reflowSpring,
+  });
 
   // 初始化: 加载历史
   useEffect(() => {
@@ -215,7 +224,7 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
         });
       }
     } catch (e) {
-      setResult({ outputs: {}, valid: false, consumedBytes: 0, error: String(e) });
+      setResult({ outputs: {}, valid: false, consumedBytes: 0, error: errorText(e) });
     } finally {
       setLoading(false);
     }
@@ -247,18 +256,18 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
               <button
                 className={`px-2 py-0.5 text-[10px] transition-colors ${mode === 'live' ? 'bg-accent text-bg-editor' : 'text-text-secondary hover:text-text-primary'}`}
                 onClick={() => updateParams({ mode: 'live' })}
-                title={t(lang, 'fdModeLive')}
+                title={translate('fdModeLive', lang)}
               >
                 <Radio size={10} className="inline mr-0.5" />
-                {t(lang, 'fdModeLive')}
+                {translate('fdModeLive', lang)}
               </button>
               <button
                 className={`px-2 py-0.5 text-[10px] transition-colors border-l border-border ${mode === 'manual' ? 'bg-accent text-bg-editor' : 'text-text-secondary hover:text-text-primary'}`}
                 onClick={() => updateParams({ mode: 'manual' })}
-                title={t(lang, 'fdModeManual')}
+                title={translate('fdModeManual', lang)}
               >
                 <Play size={10} className="inline mr-0.5" />
-                {t(lang, 'fdModeManual')}
+                {translate('fdModeManual', lang)}
               </button>
             </div>
           </div>
@@ -266,6 +275,7 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
 
         {/* 块列表 */}
         <div
+          ref={blockListRef}
           className="flex flex-col gap-1.5"
           onDragOver={(e) => { if (dragIdRef.current) e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
           onDrop={(e) => {
@@ -278,8 +288,8 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
           }}
         >
           {blocks.length === 0 && (
-            <div className="text-xs text-text-secondary opacity-60 italic py-4 text-center">
-              {t(lang, 'fdBlocksEmpty')}
+            <div className="text-xs text-text-secondary opacity-muted italic py-4 text-center">
+              {translate('fdBlocksEmpty', lang)}
             </div>
           )}
           {blocks.map((block) => {
@@ -291,7 +301,8 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
               <div
                 key={block.id}
                 data-block-id={block.id}
-                className={`border rounded-sm transition-all ${cfg.blockClass} ${isDragging ? 'opacity-40' : ''} ${isOver ? 'border-t-2 border-t-blue' : ''}`}
+                data-flip-key={block.id}
+                className={`border rounded-sm motion-transition ${cfg.blockClass} ${isDragging ? 'opacity-subtle' : ''} ${isOver ? 'border-t-2 border-t-blue' : ''}`}
                 onDragOver={handleDragOver(block.id)}
                 onDrop={handleDrop(block.id)}
               >
@@ -305,7 +316,7 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
                 >
                   <div
                     className="inline-flex items-center justify-center p-0.5 cursor-grab active:cursor-grabbing text-text-secondary hover:text-text-primary shrink-0"
-                    title={t(lang, 'cmdDragToReorder')}
+                    title={translate('cmdDragToReorder', lang)}
                     draggable
                     onDragStart={handleDragStart(block.id)}
                     onDragEnd={handleDragEnd}
@@ -316,7 +327,7 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
                     className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-sm text-[9px] font-semibold uppercase tracking-wide shrink-0 border ${cfg.badgeClass}`}
                   >
                     {cfg.icon}
-                    {t(lang, cfg.labelKey)}
+                    {translate(cfg.labelKey, lang)}
                   </span>
                   {block.label && (
                     <span className="text-xs text-text-primary truncate shrink-0">{block.label}</span>
@@ -330,7 +341,7 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
                   <button
                     className="text-text-secondary hover:text-red shrink-0 p-0.5"
                     onClick={(e) => { e.stopPropagation(); removeBlock(block.id); }}
-                    title={t(lang, 'removeWidget')}
+                    title={translate('removeWidget', lang)}
                   >
                     <Trash2 size={11} />
                   </button>
@@ -354,15 +365,15 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
             return (
               <button
                 key={bt}
-                className="inline-flex items-center gap-1 bg-transparent border border-dashed border-border text-text-secondary px-2 py-1 text-[11px] rounded-sm cursor-pointer transition-all hover:text-text-primary hover:border-accent"
+                className="inline-flex items-center gap-1 bg-transparent border border-dashed border-border text-text-secondary px-2 py-1 text-[11px] rounded-sm cursor-pointer motion-transition hover:text-text-primary hover:border-accent"
                 onClick={() => addBlock(bt)}
-                title={t(lang, cfg.addLabelKey)}
+                title={translate(cfg.addLabelKey, lang)}
               >
                 <Plus size={11} />
                 <span className={`inline-flex items-center gap-0.5 ${cfg.iconClass}`}>
                   {cfg.icon}
                 </span>
-                <span>{t(lang, cfg.addLabelKey)}</span>
+                <span>{translate(cfg.addLabelKey, lang)}</span>
               </button>
             );
           })}
@@ -406,10 +417,10 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
         )}
 
         {/* 全局设置 (与 CommandSender 同款 grid 行 + 开关按钮) */}
-        <div className="text-[10px] text-text-secondary uppercase tracking-wide font-semibold pt-1">{t(lang, 'fdSettings')}</div>
+        <div className="section-heading section-heading--micro pt-1">{translate('fdSettings', lang)}</div>
         <div className="flex flex-col gap-2 p-2 bg-bg-editor border border-border rounded">
-          <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-            <label className="text-xs text-text-secondary">{t(lang, 'cmdLabel')}</label>
+          <div className="field-grid field-grid--default">
+            <label className="text-xs text-text-secondary">{translate('cmdLabel', lang)}</label>
             <input
               type="text"
               value={params.label}
@@ -427,13 +438,13 @@ export function FrameDecoder({ widget }: FrameDecoderProps) {
           ).map(([labelKey, paramKey]) => {
             const on = params[paramKey] ?? false;
             return (
-              <div key={paramKey} className="grid grid-cols-[80px_1fr] items-center gap-2">
-                <label className="text-xs text-text-secondary">{t(lang, labelKey)}</label>
+              <div key={paramKey} className="field-grid field-grid--default">
+                <label className="text-xs text-text-secondary">{translate(labelKey, lang)}</label>
                 <button
-                  className={`bg-bg-input border border-border text-text-secondary px-2 py-0.5 text-xs rounded-sm cursor-pointer transition-all hover:text-text-primary ${on ? 'bg-bg-button text-text-inverse border-bg-button' : ''}`}
+                  className={`bg-bg-input border border-border text-text-secondary px-2 py-0.5 text-xs rounded-sm cursor-pointer motion-transition hover:text-text-primary ${on ? 'bg-bg-button text-text-inverse border-bg-button' : ''}`}
                   onClick={() => updateParams({ [paramKey]: !on })}
                 >
-                  {on ? t(lang, 'cmdNewlineOn') : t(lang, 'cmdNewlineOff')}
+                  {on ? translate('cmdNewlineOn', lang) : translate('cmdNewlineOff', lang)}
                 </button>
               </div>
             );

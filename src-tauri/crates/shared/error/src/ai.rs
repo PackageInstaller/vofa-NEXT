@@ -50,13 +50,6 @@ pub enum AiError {
     #[error("对话任务已取消")]
     Cancelled,
 
-    /// 工具调用循环超过最大轮次仍未得到最终回答。
-    #[error("工具调用循环超过最大轮次 ({rounds})")]
-    MaxToolRounds {
-        /// 实际达到的轮次上限。
-        rounds: u32,
-    },
-
     /// 指定 id 的对话会话不存在。
     #[error("AI 会话 [{id}] 不存在")]
     UnknownSession {
@@ -86,12 +79,9 @@ pub enum AiError {
         details: String,
     },
 
-    /// read_skill 请求了不存在的知识库文档 id。
-    #[error("知识库文档不存在: {skill}")]
-    SkillNotFound {
-        /// 请求的 skill id。
-        skill: String,
-    },
+    /// Debug 构建从开发目录 .env 只读密钥，设置页不能覆盖该文件。
+    #[error("Debug 模式的 API key 从开发目录 .env 读取，请直接编辑该文件")]
+    DevEnvReadOnly,
 }
 
 impl Error for AiError {
@@ -103,12 +93,11 @@ impl Error for AiError {
             Self::MissingModel { .. } => "AiMissingModel",
             Self::ProviderRequest { .. } => "AiProviderRequest",
             Self::Cancelled => "AiCancelled",
-            Self::MaxToolRounds { .. } => "AiMaxToolRounds",
             Self::UnknownSession { .. } => "AiUnknownSession",
             Self::Persist { .. } => "AiPersist",
             Self::Keyring { .. } => "AiKeyring",
             Self::KeyringAccessDenied { .. } => "AiKeyringAccessDenied",
-            Self::SkillNotFound { .. } => "AiSkillNotFound",
+            Self::DevEnvReadOnly => "AiDevEnvReadOnly",
         }
     }
 }

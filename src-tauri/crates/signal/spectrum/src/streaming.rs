@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use crate::window::{apply_window, WindowType};
+use crate::window::{WindowType, apply_window};
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 use rustfft::num_complex::Complex32;
 use serde::{Deserialize, Serialize};
@@ -268,10 +268,11 @@ impl StreamingIfft {
         let hop = self.config.hop_size;
         for i in 0..hop {
             let index = frame.start_sample + i64::try_from(i).unwrap_or(0);
-            if let Ok(index) = u64::try_from(index) {
-                if index < frame.valid_samples && self.weight[i] > 1e-10 {
-                    emit(index, self.sum[i] / self.weight[i]);
-                }
+            if let Ok(index) = u64::try_from(index)
+                && index < frame.valid_samples
+                && self.weight[i] > 1e-10
+            {
+                emit(index, self.sum[i] / self.weight[i]);
             }
         }
         self.sum.rotate_left(hop);

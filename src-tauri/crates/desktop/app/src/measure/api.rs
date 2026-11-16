@@ -2,13 +2,13 @@
 
 use std::sync::Arc;
 
-use measurement::{suggest_autoset, AutoSetSuggestion, ChannelFit};
+use measurement::{AutoSetSuggestion, ChannelFit, suggest_autoset};
 use parking_lot::Mutex;
 use waveform::{DataBuffer, DerivedSeriesSelector};
 
 use super::{
-    extract_window, measure_series, ChannelMeasurement, DerivedMeasurement, ExtractedWindow,
-    SeriesKey, SourceMeasurements, AUTOSET_SEARCH_WINDOW_MS, MEASURE_BUDGET, REFINE_BUDGET,
+    AUTOSET_SEARCH_WINDOW_MS, ChannelMeasurement, DerivedMeasurement, ExtractedWindow,
+    MEASURE_BUDGET, REFINE_BUDGET, SeriesKey, SourceMeasurements, extract_window, measure_series,
 };
 
 /// 计算单数据源测量快照 (同步; 调用方负责放入阻塞线程)。
@@ -111,19 +111,20 @@ pub fn compute_autoset_suggestion(
     )?;
     let mut fits = build_fits(&extracted);
     // 细化重查: 有序列处于层路径且周期被守卫拒绝 → 预算 ×4 越一层重测
-    if extracted.is_tier() && fits.iter().any(|fit| fit.period_sec.is_none()) {
-        if let Some(refined) = extract_window(
+    if extracted.is_tier()
+        && fits.iter().any(|fit| fit.period_sec.is_none())
+        && let Some(refined) = extract_window(
             buffer,
             AUTOSET_SEARCH_WINDOW_MS,
             &requested,
             derived,
             REFINE_BUDGET,
-        ) {
-            let refined_fits = build_fits(&refined);
-            for (fit, better) in fits.iter_mut().zip(refined_fits) {
-                if fit.period_sec.is_none() {
-                    fit.period_sec = better.period_sec;
-                }
+        )
+    {
+        let refined_fits = build_fits(&refined);
+        for (fit, better) in fits.iter_mut().zip(refined_fits) {
+            if fit.period_sec.is_none() {
+                fit.period_sec = better.period_sec;
             }
         }
     }

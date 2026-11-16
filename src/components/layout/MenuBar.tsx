@@ -1,17 +1,22 @@
 import { memo, useEffect, useMemo, useState } from 'react';
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { exit } from '@tauri-apps/plugin-process';
+import { platform } from '../../lib/platform';
+import { isWindowsHost } from '../../lib/platform/host';
+import {
+  closeWindow,
+  minimizeWindow,
+  setWindowZoom,
+  toggleMaximizeWindow,
+} from '../../lib/platform/window';
 import clsx from 'clsx';
 import { useAppStore } from '../../store/appStore';
 import { useHistoryStore } from '../../store/historyStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getAvailableDataPanelEntries, type DataPanelEntry } from '../../store/slices/dataTabs';
 import { openDataPanelAndReveal, openNodePropertiesPanel } from '../../lib/utils/revealDataTab';
-import { t, type Lang } from '../../i18n';
+import { translate, type Lang } from '../../i18n';
 
-const APP_GITHUB = 'https://github.com/Horldsence/lissio';
-const APP_DOCS = 'https://github.com/Horldsence/lissio#readme';
+const APP_GITHUB = 'https://codeberg.org/Horldsence/Lissio';
+const APP_DOCS = 'https://codeberg.org/Horldsence/Lissio#readme';
 
 /// Windows 平台检测 — 仅 Windows 挂载自定义菜单栏。
 ///
@@ -19,10 +24,18 @@ const APP_DOCS = 'https://github.com/Horldsence/lissio#readme';
 /// 无法正确绘制 — 菜单文字按深色模式渲染为白色, 但菜单背景不填充, 造成
 /// "白字白底" 且背景透视露出下层内容。因此 Windows 端原生菜单已停用
 /// (见 src-tauri/src/lib.rs setup), 由本组件复刻同等菜单。
+///
+/// 实现与设置层的亚克力背板补偿共用 `lib/platform/host`, 同一份 UA 判断只维护一处。
 export function isWindowsPlatform(): boolean {
-  return typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent);
+  return isWindowsHost();
 }
 
+/// 窗口控制 (缩放 / 最小化 / 最大化 / 关闭) 只存在于 Tauri 宿主窗口: 浏览器标签页
+/// 不能被脚本最小化或关闭。因此不把它们塞进通用 `Platform` 接口 (Web 出口没有
+/// 可兑现的实现), 而是走 `lib/platform/window.ts` 这个桌面专属出口 — 内部按
+/// `hasTauriRuntime()` 守卫, 浏览器端 no-op。本菜单本身也只在 Windows 桌面挂载
+/// (见 isWindowsPlatform), 所以 Web 出口不会看到这些菜单项。
+///
 /// 缩放系数 — 模块级持久, 跨菜单重开保留 (与原生菜单语义一致)
 const ZOOM_STEP = 0.2;
 const ZOOM_MIN = 0.5;
@@ -32,7 +45,7 @@ let zoomFactor = 1;
 async function setZoom(next: number): Promise<void> {
   zoomFactor = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
   try {
-    await getCurrentWebviewWindow().setZoom(zoomFactor);
+    await setWindowZoom(zoomFactor);
   } catch {
     // 纯浏览器 dev / 测试环境无 Tauri 后端, 静默忽略
   }
@@ -70,7 +83,7 @@ interface MenuDef {
 
 /// 构建菜单定义 — 与 Rust 原生菜单 (src-tauri/src/menu.rs) 保持同等结构
 function buildMenus(lang: Lang, historyFlags: { canUndo: boolean; canRedo: boolean }): MenuDef[] {
-  const L = (key: string) => t(lang, key);
+  const L = (key: string) => translate(key, lang);
   const app = useAppStore.getState;
   const settings = useSettingsStore.getState;
 
@@ -112,7 +125,7 @@ function buildMenus(lang: Lang, historyFlags: { canUndo: boolean; canRedo: boole
         { kind: 'item', id: 'about', label: L('menuAbout'), onClick: () => settings().openAbout() },
         { kind: 'item', id: 'settings', label: L('menuSettings'), shortcut: 'Ctrl+,', onClick: () => settings().open() },
         { kind: 'separator' },
-        { kind: 'item', id: 'quit', label: L('menuQuit'), onClick: () => void exit(0).catch(() => { return undefined; }) },
+        { kind: 'item', id: 'quit', label: L('menuQuit'), onClick: () => void platform.exitApp(0).catch(() => { return undefined; }) },
       ],
     },
     {
@@ -179,19 +192,19 @@ function buildMenus(lang: Lang, historyFlags: { canUndo: boolean; canRedo: boole
           kind: 'item',
           id: 'minimize',
           label: L('menuMinimize'),
-          onClick: () => void getCurrentWebviewWindow().minimize().catch(() => { return undefined; }),
+          onClick: () => void minimizeWindow().catch(() => { return undefined; }),
         },
         {
           kind: 'item',
           id: 'toggle-maximize',
           label: L('menuMaximize'),
-          onClick: () => void getCurrentWebviewWindow().toggleMaximize().catch(() => { return undefined; }),
+          onClick: () => void toggleMaximizeWindow().catch(() => { return undefined; }),
         },
         {
           kind: 'item',
           id: 'close-window',
           label: L('menuCloseWindow'),
-          onClick: () => void getCurrentWebviewWindow().close().catch(() => { return undefined; }),
+          onClick: () => void closeWindow().catch(() => { return undefined; }),
         },
       ],
     },
@@ -199,8 +212,8 @@ function buildMenus(lang: Lang, historyFlags: { canUndo: boolean; canRedo: boole
       id: 'help',
       label: L('menuHelp'),
       entries: [
-        { kind: 'item', id: 'docs', label: L('menuDocs'), onClick: () => void openUrl(APP_DOCS).catch(() => { return undefined; }) },
-        { kind: 'item', id: 'github', label: L('menuGithub'), onClick: () => void openUrl(APP_GITHUB).catch(() => { return undefined; }) },
+        { kind: 'item', id: 'docs', label: L('menuDocs'), onClick: () => void platform.openUrl(APP_DOCS).catch(() => { return undefined; }) },
+        { kind: 'item', id: 'github', label: L('menuGithub'), onClick: () => void platform.openUrl(APP_GITHUB).catch(() => { return undefined; }) },
         { kind: 'separator' },
         { kind: 'item', id: 'about', label: L('menuAbout'), onClick: () => settings().openAbout() },
       ],
@@ -327,7 +340,7 @@ export const MenuBar = memo(function MenuBar() {
               {menu.label}
             </button>
             {open && (
-              <div role="menu" data-menu-panel className="context-menu absolute left-0 top-full">
+              <div role="menu" data-menu-panel className="context-menu popover-surface motion-float motion-pop-in absolute left-0 top-full">
                 {menu.entries.map((entry, idx) => {
                   if (entry.kind === 'separator') {
                     return <div key={`sep-${idx}`} className="context-menu-separator" />;
@@ -339,7 +352,7 @@ export const MenuBar = memo(function MenuBar() {
                       role="menuitem"
                       className={clsx(
                         'context-menu-item',
-                        entry.disabled && 'opacity-50 cursor-not-allowed pointer-events-none'
+                        entry.disabled && 'opacity-disabled cursor-not-allowed pointer-events-none'
                       )}
                       style={{ height: 26 }}
                       onClick={handleItemClick(entry)}

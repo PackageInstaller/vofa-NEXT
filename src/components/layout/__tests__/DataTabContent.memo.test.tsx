@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState, type FunctionComponent } from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
+import { renderWithI18n } from '../../../test/renderWithI18n';;
 import { DataTabContent } from '../DataTabContent';
 import { useAppStore } from '../../../store/appStore';
 import { useWaveformScopeStore, createPerWidgetState } from '../../../store/waveformScopeStore';
@@ -12,7 +13,7 @@ const HEAVY_TAB: DataTab = { id: 'heavy', type: 'can', name: 'Heavy', closable: 
 
 const PIE_WIDGET: WidgetConfig = {
   kind: 'PieChart',
-  params: { id: 'pie-1', label: 'Pie', segments: ['A', 'B'], channels: [0, 1] },
+  params: { id: 'pie-1', label: 'Pie', segments: ['A', 'B'] },
 };
 
 /// React 19 的 memo 返回含 `.type` (真正渲染函数) 的对象 — 直接 spy `.type`
@@ -92,7 +93,7 @@ describe('DataTabContent sibling-tab isolation', () => {
   it('does not re-render the stable sibling view when the active tab switches', () => {
     const spy = spyPieChartRender();
 
-    render(<SiblingTabsHarness />);
+    renderWithI18n(<SiblingTabsHarness />);
     // 初始活动 Tab = stable, pie 视图渲染一次
     expect(spy).toHaveBeenCalledTimes(1);
 
@@ -108,7 +109,7 @@ describe('DataTabContent sibling-tab isolation', () => {
   it('does not cascade DataTabContent store re-renders into the mounted view', () => {
     const spy = spyPieChartRender();
 
-    render(<DataTabContent tabId="stable" />);
+    renderWithI18n(<DataTabContent tabId="stable" />);
     expect(spy).toHaveBeenCalledTimes(1);
 
     // DataTabContent 订阅了 lang / rfEdges — 这两个 store 变化会触发其自身重渲染,
@@ -125,7 +126,7 @@ describe('DataTabContent sibling-tab isolation', () => {
   it('still re-renders the view when its own widget identity changes', () => {
     const spy = spyPieChartRender();
 
-    render(<DataTabContent tabId="stable" />);
+    renderWithI18n(<DataTabContent tabId="stable" />);
     expect(spy).toHaveBeenCalledTimes(1);
 
     // 替换 pie widget 对象 (同 id 新引用) → 分支 props 变化 → 应重渲染

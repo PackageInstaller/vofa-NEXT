@@ -5,8 +5,12 @@
 //! 评估批次、发送调度) 持 [`ExecutionControl::boundary`] 读锁跨越其异步段,
 //! 运行状态切换持写锁 — 切换因此与在途求值批次/设备写入互斥, 旧 epoch 的
 //! 异步结果不可能在切换后发布或发送。
+//!
+//! 票据分两类: [`ExecutionControl::ingest_ticket`] (运行或暂停) 放行采集/解析/
+//! 缓存/求值 — 暂停只是停止发送, 数据链继续; [`ExecutionControl::ticket`] (仅运行)
+//! 放行自动发送与命令帧等设备写路径。
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -40,12 +44,18 @@ pub enum RunAction {
 #[derive(Default)]
 pub struct ExecutionControl {
     word: AtomicU64,
+    resumed_at_unix_ns: AtomicI64,
     /// 互斥域: 读侧 (评估批次 / 发送 IO / 字节路由) 持读锁, 运行状态切换持写锁。
     /// 用 tokio 的异步感知实现 — 读 guard 需要跨越 await。
     pub boundary: tokio::sync::RwLock<()>,
 }
 
 impl ExecutionControl {
+    /// 最近一次启动/恢复的边界；源端收到更早的字节不能进入采集视图。
+    pub fn resumed_at_unix_ns(&self) -> i64 {
+        self.resumed_at_unix_ns.load(Ordering::Acquire)
+    }
+
     pub fn snapshot(&self) -> RunSnapshot {
         let word = self.word.load(Ordering::Acquire);
         RunSnapshot {
@@ -58,7 +68,10 @@ impl ExecutionControl {
         }
     }
 
-    /// 运行中返回当前原子字作为票据; 暂停/停止返回 None (数据链门控依据)。
+    /// 发送门控票据 — 仅运行态返回当前原子字; 暂停/停止返回 None。
+    ///
+    /// 自动发送 / 命令帧 / TextOut 等设备写路径据此停发: 暂停只停发送,
+    /// 数据链本身继续 (见 [`ExecutionControl::ingest_ticket`])。
     pub fn ticket(&self) -> Option<u64> {
         let word = self.word.load(Ordering::Acquire);
         (word & 3 == 1).then_some(word)
@@ -69,12 +82,37 @@ impl ExecutionControl {
         ticket & 3 == 1 && self.word.load(Ordering::Acquire) == ticket
     }
 
+    /// 数据链票据 — 运行或暂停都放行采集/解析/缓存/图求值; 停止返回 None。
+    ///
+    /// 暂停期间字节继续进入全部缓存与录制, 所以读任务路由与评估批次用本票据;
+    /// 只有停止是硬门控: 在途字节直接丢弃, 不进入任何缓存。
+    pub fn ingest_ticket(&self) -> Option<u64> {
+        let word = self.word.load(Ordering::Acquire);
+        (word & 3 != 0).then_some(word)
+    }
+
+    /// 数据链票据是否仍有效 (未停止且 epoch 未前进) — 求值/入队前的最后校验。
+    pub fn accepts_ingest(&self, ticket: u64) -> bool {
+        ticket & 3 != 0 && self.word.load(Ordering::Acquire) == ticket
+    }
+
     /// 切换运行状态并推进 epoch。
     ///
     /// 调用方必须持 [`ExecutionControl::boundary`] 写锁, 并在锁内完成依赖状态的
     /// 重置 (评估队列 / 连续性状态 / 发送基线) — 保证切换原子地对在途批次生效。
     pub fn transition(&self, state: RunState) -> RunSnapshot {
-        let epoch = self.snapshot().epoch.wrapping_add(1);
+        let previous = self.snapshot();
+        let epoch = previous.epoch.wrapping_add(1);
+        // 恢复点只在真正启动 (Stopped → Running) 推进: 从暂停恢复保持数据连续,
+        // 不把暂停期排队尾字节按"早于恢复点"丢弃 (见读任务的源端时间戳过滤)。
+        if state == RunState::Running && previous.state != RunState::Paused {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |duration| {
+                    i64::try_from(duration.as_nanos()).unwrap_or(i64::MAX)
+                });
+            self.resumed_at_unix_ns.store(now, Ordering::Release);
+        }
         let tag = match state {
             RunState::Stopped => 0,
             RunState::Running => 1,
@@ -271,92 +309,5 @@ impl SendScheduler {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn changes_coalesce_and_first_value_only_arms() {
-        let mut schedule = SendSchedule::default();
-        assert!(!schedule.due(0, SendMode::OnChange, 50, Some(b"A")));
-        assert!(!schedule.due(20, SendMode::OnChange, 50, Some(b"B")));
-        assert!(schedule.due(50, SendMode::OnChange, 50, Some(b"C")));
-        schedule.complete(b"C", Ok(()));
-        assert!(!schedule.due(100, SendMode::OnChange, 50, Some(b"C")));
-        assert_eq!(schedule.status.sent, 1);
-    }
-
-    #[test]
-    fn missed_timer_periods_are_skipped_and_failures_do_not_replay() {
-        let mut schedule = SendSchedule::default();
-        assert!(!schedule.due(0, SendMode::Timer, 100, Some(b"A")));
-        assert!(schedule.due(350, SendMode::Timer, 100, Some(b"A")));
-        assert_eq!(schedule.status.skipped, 2);
-        schedule.complete(b"A", Err("disconnected".into()));
-        assert!(!schedule.due(400, SendMode::Timer, 100, None));
-        assert!(!schedule.due(500, SendMode::Timer, 100, Some(b"B")));
-        assert!(!schedule.due(599, SendMode::Timer, 100, Some(b"B")));
-        assert!(schedule.due(600, SendMode::Timer, 100, Some(b"B")));
-    }
-
-    #[test]
-    fn encoding_failure_invalidates_previous_bytes() {
-        let mut schedule = SendSchedule::default();
-        schedule.due(0, SendMode::OnChange, 1, Some(b"A"));
-        assert!(!schedule.due(1, SendMode::OnChange, 1, None));
-        assert!(!schedule.due(2, SendMode::OnChange, 1, Some(b"B")));
-    }
-
-    #[test]
-    fn lifecycle_tickets_cannot_survive_restart() {
-        let control = ExecutionControl::default();
-        assert!(control.ticket().is_none());
-        control.transition(RunState::Running);
-        let ticket = control.ticket().unwrap();
-        control.transition(RunState::Paused);
-        control.transition(RunState::Running);
-        assert!(!control.accepts(ticket));
-    }
-
-    fn frame_task(widget_id: &str, frame_id: &str, mode: SendMode) -> SendTask {
-        SendTask {
-            widget_id: widget_id.to_string(),
-            frame_id: frame_id.to_string(),
-            frame: CommandFrameDto {
-                blocks: Vec::new(),
-                append_newline: false,
-            },
-            mode,
-            interval_ms: 100,
-        }
-    }
-
-    #[test]
-    fn widget_task_replacement_preserves_other_widgets() {
-        let mut scheduler = SendScheduler::default();
-        scheduler.set_widget_tasks("w1", vec![frame_task("w1", "f1", SendMode::Timer)]);
-        scheduler.set_widget_tasks("w2", vec![frame_task("w2", "f1", SendMode::OnChange)]);
-        assert_eq!(scheduler.len(), 2);
-
-        // 同 widget 重挂 (编辑/StrictMode 双挂) — 键集合不增长
-        scheduler.set_widget_tasks("w1", vec![frame_task("w1", "f1", SendMode::Timer)]);
-        assert_eq!(scheduler.len(), 2);
-
-        // 手动模式不入注册表
-        scheduler.set_widget_tasks("w3", vec![frame_task("w3", "f1", SendMode::Manual)]);
-        assert_eq!(scheduler.len(), 2);
-
-        // 空列表 = 注销
-        scheduler.set_widget_tasks("w1", Vec::new());
-        assert_eq!(scheduler.len(), 1);
-    }
-
-    #[test]
-    fn prune_and_status_surface() {
-        let mut scheduler = SendScheduler::default();
-        scheduler.set_widget_tasks("w1", vec![frame_task("w1", "f1", SendMode::Timer)]);
-        scheduler.retain_existing(|id| id != "w1");
-        assert!(scheduler.is_empty());
-        scheduler.set_widget_tasks("w2", vec![frame_task("w2", "f1", SendMode::OnChange)]);
-        assert!(scheduler.status_map().contains_key("w2\u{0}f1"));
-    }
-}
+#[path = "execution_tests.rs"]
+mod tests;

@@ -3,14 +3,15 @@
 //! 仿 AboutModal: 遮罩 + 居中卡片, Esc/点遮罩关闭
 //! 下载中禁止关闭 (避免用户误以为更新已取消)
 
-import { useEffect } from 'react';
 import { X, RefreshCw } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useUpdateStore } from '../store/updateStore';
-import { t } from '../i18n';
+import { translate } from '../i18n';
+import { DialogOverlay, DialogSurface } from './ui/Dialog';
 
 export function UpdateDialog() {
   const lang = useAppStore((s) => s.lang);
+  const dialogOpen = useUpdateStore((s) => s.dialogOpen);
   const status = useUpdateStore((s) => s.status);
   const updateInfo = useUpdateStore((s) => s.updateInfo);
   const currentVersion = useUpdateStore((s) => s.currentVersion);
@@ -24,40 +25,27 @@ export function UpdateDialog() {
   /// 下载中禁止关闭
   const closable = status !== 'downloading';
 
-  useEffect(() => {
-    if (!closable) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeDialog();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [closable, closeDialog]);
-
   return (
-    <div
-      className="fixed inset-0 bg-bg-overlay flex items-center justify-center z-modal animate-[settings-fade-in_0.15s_ease-out]"
-      onClick={(event) => { if (event.target === event.currentTarget && closable) closeDialog(); }}
-      onKeyDown={(event) => { if (closable && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); closeDialog(); } }}
-      role="button"
-      tabIndex={0}
-    >
-      <div
-        className="w-[440px] max-w-[90vw] max-h-[80vh] bg-bg-sidebar border border-border rounded-lg shadow-modal py-6 px-7 flex flex-col gap-2 relative animate-[settings-slide-in_0.2s_ease-out]"
-        role="dialog"
-        aria-modal="true"
+    // `onDismiss` 在不可关闭时留空: 栈里的这一层仍然占位, Escape 到此为止, 不会
+    // 穿透到它背后的浮层 —— 用户看到的是"按了没反应", 而不是"更新弹窗背后的东西
+    // 被关掉了"。
+    <DialogOverlay open={dialogOpen} onDismiss={closable ? closeDialog : undefined}>
+      <DialogSurface
+        className="w-[440px] max-w-[90vw] max-h-[80vh] py-6 px-7 flex flex-col gap-2 relative"
+        label={translate('updateAvailableTitle', lang)}
       >
         {closable && (
           <button
             className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-bg-hover hover:text-text-bright transition-colors cursor-pointer bg-transparent border-none"
             onClick={closeDialog}
-            title={t(lang, 'updateLater')}
+            title={translate('updateLater', lang)}
           >
             <X size={16} />
           </button>
         )}
 
         <h2 className="text-base font-semibold text-text-bright m-0">
-          {t(lang, 'updateAvailableTitle')}
+          {translate('updateAvailableTitle', lang)}
         </h2>
 
         {updateInfo && (
@@ -69,14 +57,14 @@ export function UpdateDialog() {
         )}
         {updateInfo?.date && (
           <p className="text-xs text-text-secondary m-0">
-            {t(lang, 'updateReleaseDate')}: {updateInfo.date}
+            {translate('updateReleaseDate', lang)}: {updateInfo.date}
           </p>
         )}
 
         {updateInfo?.notes && (
           <>
-            <div className="text-xs font-semibold uppercase tracking-[0.5px] text-text-secondary mt-2">
-              {t(lang, 'updateReleaseNotes')}
+            <div className="section-heading mt-2">
+              {translate('updateReleaseNotes', lang)}
             </div>
             <div className="text-xs text-text-primary leading-relaxed whitespace-pre-wrap max-h-[240px] overflow-y-auto bg-bg-input rounded px-3 py-2 border border-border">
               {updateInfo.notes}
@@ -88,7 +76,7 @@ export function UpdateDialog() {
           <div className="flex items-center gap-2 mt-3">
             <div className="flex-1 h-1.5 rounded-full bg-bg-hover overflow-hidden">
               <div
-                className="h-full bg-accent transition-all duration-200"
+                className="h-full bg-accent motion-transition"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -97,12 +85,12 @@ export function UpdateDialog() {
         )}
 
         {status === 'ready' && (
-          <p className="text-xs text-text-secondary m-0 mt-2">{t(lang, 'updateReadyHint')}</p>
+          <p className="text-xs text-text-secondary m-0 mt-2">{translate('updateReadyHint', lang)}</p>
         )}
 
         {status === 'error' && (
-          <p className="text-xs text-red-400 m-0 mt-2 break-all">
-            {t(lang, 'updateError')}: {error}
+          <p className="text-xs text-text-danger m-0 mt-2 break-all">
+            {translate('updateError', lang)}: {error}
           </p>
         )}
 
@@ -113,26 +101,26 @@ export function UpdateDialog() {
                 className="bg-transparent text-text-secondary border-none px-2.5 py-1 text-xs cursor-pointer rounded transition-colors hover:bg-bg-hover hover:text-text-primary"
                 onClick={skipVersion}
               >
-                {t(lang, 'updateSkipVersion')}
+                {translate('updateSkipVersion', lang)}
               </button>
               <button
-                className="bg-transparent text-text-primary border border-border px-2.5 py-1 text-xs cursor-pointer rounded transition-all hover:bg-bg-hover hover:border-accent hover:text-text-bright"
+                className="bg-transparent text-text-primary border border-border px-2.5 py-1 text-xs cursor-pointer rounded motion-transition hover:bg-bg-hover hover:border-accent hover:text-text-bright"
                 onClick={closeDialog}
               >
-                {t(lang, 'updateLater')}
+                {translate('updateLater', lang)}
               </button>
               <button
                 className="px-3 py-1 bg-bg-button text-text-inverse border-none rounded cursor-pointer text-xs inline-flex items-center gap-1.5 transition-colors hover:bg-bg-button-hover"
                 onClick={() => void downloadAndInstall()}
               >
-                {t(lang, 'updateNow')}
+                {translate('updateNow', lang)}
               </button>
             </>
           )}
           {status === 'downloading' && (
             <span className="text-xs text-text-secondary inline-flex items-center gap-1.5">
-              <RefreshCw size={12} className="animate-spin" />
-              {t(lang, 'updateDownloading')}
+              <RefreshCw size={12} className="motion-spin" />
+              {translate('updateDownloading', lang)}
             </span>
           )}
           {status === 'ready' && (
@@ -140,7 +128,7 @@ export function UpdateDialog() {
               className="px-3 py-1 bg-bg-button text-text-inverse border-none rounded cursor-pointer text-xs transition-colors hover:bg-bg-button-hover"
               onClick={() => void relaunch()}
             >
-              {t(lang, 'updateRestart')}
+              {translate('updateRestart', lang)}
             </button>
           )}
           {status === 'error' && (
@@ -148,11 +136,14 @@ export function UpdateDialog() {
               className="px-3 py-1 bg-bg-button text-text-inverse border-none rounded cursor-pointer text-xs transition-colors hover:bg-bg-button-hover"
               onClick={() => void downloadAndInstall()}
             >
-              {t(lang, 'updateRetry')}
+              {translate('updateRetry', lang)}
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </DialogSurface>
+    </DialogOverlay>
   );
 }
+
+/// 懒加载入口 — 见 `components/lazy/lazyComponents.ts` (全仓唯一 React.lazy 清单)。
+export default UpdateDialog;

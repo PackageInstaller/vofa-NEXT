@@ -3,7 +3,7 @@
 //! - 聚光灯 (TourSpotlight) 与弹窗 (TourPopover) 均为 React 组件: 弹窗直接使用主题
 //!   token, 整数 left/top 定位, 文字渲染与主应用完全一致
 //! - 遮罩层 pointer-events: none, 高亮区完全可交互 —— 实操步骤由用户真实完成:
-//!   点跳转条 / 拖控件建卡 / 连线 / 删卡 / 编译结果表删边 / 历史跳转回溯 / 切 CAN 子页
+//!   点分类图标 / 拖控件建卡 / 连线 / 删卡 / 编译结果表删边 / 历史跳转回溯 / 切 CAN 子页
 //! - 门控检测声明式内联在每个步骤的 gate.spec 里 (store 订阅检测节点/边数量跨越,
 //!   点击型用 document 捕获 + closest), 不存在与步骤表分离的索引映射
 //! - store 型基线在步骤激活一帧后快照并武装检测, 避开 prepare 触发的
@@ -16,7 +16,8 @@ import { useAppStore } from '../../store/appStore';
 import { useOnboardingStore } from '../../store/onboardingStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { openDataPanelAndReveal } from '../../lib/utils/revealDataTab';
-import { t } from '../../i18n';
+import { translate } from '../../i18n';
+import { DialogOverlay } from '../ui/Dialog';
 import { TourSpotlight, type TourRect } from './TourSpotlight';
 import { TourPopover, type TourAlign, type TourSide } from './TourPopover';
 
@@ -57,6 +58,7 @@ export function OnboardingWizard() {
   const close = useOnboardingStore((s) => s.closeWizard);
   const complete = useOnboardingStore((s) => s.completeWizard);
   const setSidebarView = useAppStore((s) => s.setSidebarView);
+  const openCategory = useAppStore((s) => s.openCategory);
   const lang = useAppStore((s) => s.lang);
 
   const [stepIndex, setStepIndex] = useState(0);
@@ -85,23 +87,23 @@ export function OnboardingWizard() {
       align: 'start',
       prepare: () => setSidebarView('quickstart'),
     },
-    // 3. 控件面板 · 九大分组总览
+    // 3. 控件分类页 · 分类条目总览
     {
       anchor: 'palette-root',
       titleKey: 'tourPaletteTitle',
       contentKey: 'tourPaletteContent',
       side: 'right',
       align: 'start',
-      prepare: () => setSidebarView('widgets'),
+      prepare: () => openCategory('display'),
     },
-    // 4. 控件面板 · 跳转条（动手）
+    // 4. 控件分类 · ActivityBar 分类导航（动手）
     {
       anchor: 'palette-jumpbar',
       titleKey: 'tourJumpbarTitle',
       contentKey: 'tourJumpbarContent',
       side: 'bottom',
       align: 'center',
-      prepare: () => setSidebarView('widgets'),
+      prepare: () => openCategory('display'),
       gate: {
         spec: { kind: 'click-in', selector: '[data-tour="palette-jumpbar"]' },
         actionKey: 'tourActJumpbar',
@@ -114,7 +116,7 @@ export function OnboardingWizard() {
       contentKey: 'tourCreateContent',
       side: 'bottom',
       align: 'center',
-      prepare: () => setSidebarView('widgets'),
+      prepare: () => openCategory('display'),
       gate: { spec: { kind: 'nodes-increase' }, actionKey: 'tourActCreate' },
     },
     // 6. 连接边（动手）
@@ -205,7 +207,7 @@ export function OnboardingWizard() {
       side: 'right',
       align: 'end',
     },
-  ], [setSidebarView]);
+  ], [setSidebarView, openCategory]);
 
   const isLast = stepIndex === defs.length - 1;
   const def = defs[stepIndex];
@@ -231,6 +233,7 @@ export function OnboardingWizard() {
 
   // ---- 步骤进入: prepare + 门控观测 ----
   useEffect(() => {
+    if (!isOpen) return;
     def.prepare?.();
     setGatePassed(false);
     if (!def.gate) return;
@@ -288,10 +291,11 @@ export function OnboardingWizard() {
       disposers.forEach((d) => d());
       clearAdvanceTimer();
     };
-  }, [stepIndex, def, gotoNext]);
+  }, [stepIndex, def, gotoNext, isOpen]);
 
   // ---- 锚点矩形跟踪 (rAF 循环): 延迟出现/动画/缩放自动收敛 ----
   useEffect(() => {
+    if (!isOpen) return;
     let raf = 0;
     let lastKey = '';
     let scrolled = false;
@@ -325,14 +329,19 @@ export function OnboardingWizard() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [def.anchor]);
+  }, [def.anchor, isOpen]);
 
-  if (!isOpen) return null;
-
-  const tr = (key: string) => t(lang, key);
+  const tr = (key: string) => translate(key, lang);
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-tour">
+    // 遮罩自己不上色: 压暗由 `TourSpotlight` 画, 因为它带着镂空 (目标区域保持原色
+    // 可见)。这里若也压一层, 它会画在镂空**下面**把洞填死。
+    <DialogOverlay
+      open={isOpen}
+      onDismiss={() => { void close(); }}
+      className="pointer-events-none dialog-overlay--bare"
+      zClassName="z-tour"
+    >
       <TourSpotlight rect={frame.rect} />
       <TourPopover
         key={stepIndex}
@@ -361,11 +370,14 @@ export function OnboardingWizard() {
         onSkipGate={gotoNext}
         onPrev={gotoPrev}
         onNext={() => {
-          if (isLast) complete();
+          if (isLast) void complete();
           else gotoNext();
         }}
-        onClose={close}
+        onClose={() => { void close(); }}
       />
-    </div>
+    </DialogOverlay>
   );
 }
+
+/// 懒加载入口 — 见 `components/lazy/lazyComponents.ts` (全仓唯一 React.lazy 清单)。
+export default OnboardingWizard;

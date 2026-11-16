@@ -67,8 +67,6 @@ export interface RadioConfig extends WidgetBaseConfig {
 export interface CheckboxConfig extends WidgetBaseConfig {
   options: ChoiceOption[];
   selectedIds: string[];
-  /** 旧版单复选框的未选中返回值；新控件固定为 0。 */
-  emptyValue?: number;
   binding: WidgetBinding;
 }
 
@@ -82,8 +80,6 @@ export interface SliderConfig extends WidgetBaseConfig {
 
 export interface LabelConfig extends WidgetBaseConfig {
   text: string;
-  /** @deprecated 旧工作区兼容；新节点通过 value 输入边绑定。 */
-  channel: number | null;
 }
 
 export interface WaveformConfig extends WidgetBaseConfig {
@@ -99,8 +95,6 @@ export interface PieChartConfig {
   id: string;
   label: string;
   segments: string[];
-  /** @deprecated 旧工作区兼容；新节点通过 segN 输入边绑定。 */
-  channels: number[];
 }
 
 export interface ImageConfig {
@@ -118,8 +112,6 @@ export interface GaugeConfig {
   /// 量程/刻度配置 (手动或滑动窗口自适应)
   range: DisplayRangeConfig;
   unit: string;          // 单位后缀, 如 'V' / 'A' / ''
-  /** @deprecated 旧工作区兼容；新节点通过 value 输入边绑定。 */
-  channel: number | null; // 绑定的输入通道 (null = 不绑定)
 }
 
 /// 进度条控件 — 横向/纵向条形显示单通道实时值占比
@@ -134,8 +126,6 @@ export interface ProgressConfig {
   showValue: boolean;
   /// 填充色 HEX; '' = 主题默认色
   color: string;
-  /** @deprecated 旧工作区兼容；新节点通过 value 输入边绑定。 */
-  channel: number | null;
 }
 
 /// LED 指示灯 — 阈值控制开关色
@@ -145,8 +135,6 @@ export interface LEDConfig {
   threshold: number;     // 输入 >= threshold 视为 ON
   on_color: string;      // HEX, 如 '#89d185'
   off_color: string;     // HEX, 如 '#3c3c3c'
-  /** @deprecated 旧工作区兼容；新节点通过 value 输入边绑定。 */
-  channel: number | null;
 }
 
 /// 大数字显示 — 大字号展示单通道数值
@@ -155,8 +143,6 @@ export interface NumberDisplayConfig {
   label: string;
   unit: string;
   precision: number;     // 小数位数
-  /** @deprecated 旧工作区兼容；新节点通过 value 输入边绑定。 */
-  channel: number | null;
 }
 
 /// 自定义 JS 控件 — 用户代码在 iframe 沙箱中渲染
@@ -254,7 +240,7 @@ export interface TriggerConfig {
 
 // ============ 控件类别 ============
 
-/// 控件类别 — 用于 WidgetPalette 分组与颜色区分
+/// 控件类别 — 用于控件分类页分组与颜色区分
 export type WidgetCategory =
   | 'transport'
   | 'protocol'
@@ -264,6 +250,19 @@ export type WidgetCategory =
   | 'math'       // 算术控件 (Math/Filter — 加减乘除/数学函数/滤波)
   | 'string'     // 字符串控件 (Str — 字符串截取/拼接/查找/大小写转换)
   | 'custom';    // 自定义控件 (Custom JS)
+
+/// 控件面板分类 — ActivityBar 分类导航与侧边栏分类页一一对应;
+/// attributes (测试数据等节点属性入口) 无独立 WidgetCategory, 图标色归 custom
+export type PaletteCategoryId =
+  | 'transport'
+  | 'protocol'
+  | 'send'
+  | 'math'
+  | 'string'
+  | 'display'
+  | 'input'
+  | 'attributes'
+  | 'custom';
 
 export type WidgetConfig =
   | { kind: 'Knob'; params: KnobConfig }
@@ -295,6 +294,11 @@ export type WidgetConfig =
   | { kind: 'TextInput'; params: TextInputConfig }
   | { kind: 'Str'; params: StrConfig }
   | { kind: 'TextOut'; params: TextOutConfig };
+
+/// 控件种类的联合 — 从 `WidgetConfig` 派生, 保证与配置形状永远同源。
+/// 定义在这里 (而非视图侧的 registryTypes) 是因为面板注册表等实现层模块也要用它,
+/// 而实现层不应为了一个类型别名去引用视图目录。
+export type WidgetKind = WidgetConfig['kind'];
 
 /// 文本下发控件 — 动态发送回传: 把图内字符串 (text 输入口) 写回目标 Transport 的 tx
 /// 后端求值经通用字符串发布进入 graph_string_outputs, 由发送 ticker 按 minIntervalMs
@@ -356,7 +360,7 @@ export function getWidgetCategory(kind: WidgetConfig['kind']): WidgetCategory {
   }
 }
 
-/// 各类别主题色 — WidgetPalette 分组着色与节点卡片着色共用
+/// 各类别主题色 — 控件分类页分组着色与节点卡片着色共用
 export const WIDGET_CATEGORY_COLORS: Record<WidgetCategory, string> = {
   transport: '#dcdcaa',
   protocol: '#4ec9b0',

@@ -1,5 +1,8 @@
+import { Send } from 'lucide-react';
 import type { AppendMode } from './rawDataViewHelpers';
-import { t, type Lang } from '../../../i18n';
+import { translate, type Lang } from '../../../i18n';
+import { ToolbarButton } from '../../ui/ToolbarIconButton';
+import { HorizontalScrollArea } from '../../ui/HorizontalScrollArea';
 
 interface Props {
   appendMode: AppendMode;
@@ -25,19 +28,19 @@ export function RawDataViewSendPanel({
   targetTransportLabel,
 }: Props) {
   const appendOptions: { mode: AppendMode; label: string }[] = [
-    { mode: 'none', label: t(lang, 'appendNone') },
-    { mode: 'nl', label: t(lang, 'appendNewline') },
-    { mode: 'tab', label: t(lang, 'appendTab') },
-    { mode: 'nl_tab', label: t(lang, 'appendNewlineTab') },
+    { mode: 'none', label: translate('appendNone', lang) },
+    { mode: 'nl', label: translate('appendNewline', lang) },
+    { mode: 'tab', label: translate('appendTab', lang) },
+    { mode: 'nl_tab', label: translate('appendNewlineTab', lang) },
   ];
 
   const renderAppendOptions = (vertical = false) => (
     <div className={`flex ${vertical ? 'flex-col' : 'items-center'} gap-0.5 ${vertical ? '' : 'flex-shrink-0'}`}>
-      {!vertical && <span className="text-xs text-text-secondary mr-0.5">{t(lang, 'appendSuffix')}:</span>}
+      {!vertical && <span className="text-xs text-text-secondary mr-0.5">{translate('appendSuffix', lang)}:</span>}
       {appendOptions.map((opt) => (
         <button
           key={opt.mode}
-          className={`px-1.5 py-0.5 border rounded-sm text-xs font-mono cursor-pointer transition-all ${appendMode === opt.mode ? 'bg-accent border-accent text-text-inverse' : 'bg-bg-input border-border text-text-secondary hover:border-accent hover:text-text-primary'}`}
+          className={`px-1.5 py-0.5 border rounded-sm text-xs font-mono cursor-pointer motion-transition ${appendMode === opt.mode ? 'bg-accent border-accent text-text-inverse' : 'bg-bg-input border-border text-text-secondary hover:border-accent hover:text-text-primary'}`}
           aria-pressed={appendMode === opt.mode}
           onClick={() => onAppendModeChange(opt.mode)}
         >
@@ -50,7 +53,7 @@ export function RawDataViewSendPanel({
   const renderSendInput = () => (
     <input
       type="text"
-      className="flex-1 min-w-[60px] px-2 py-1 bg-bg-input text-text-primary border border-border rounded text-sm focus:outline-none focus:border-accent transition-colors"
+      className="w-[220px] flex-shrink-0 px-2 py-1 bg-bg-input text-text-primary border border-border rounded text-sm focus:outline-none focus:border-accent transition-colors"
       placeholder={lang === 'zh' ? '输入要发送的文本...' : 'Type to send...'}
       value={sendContent}
       onChange={(e) => onSendContentChange(e.target.value)}
@@ -61,29 +64,32 @@ export function RawDataViewSendPanel({
   );
 
   const renderSendButton = () => (
-    <button
-      className="px-3 py-1.5 bg-bg-button text-text-inverse border-none rounded cursor-pointer text-sm text-center transition-colors hover:bg-bg-button-hover disabled:opacity-50 disabled:cursor-default"
+    <ToolbarButton
+      size="lg"
+      variant="primary"
+      className="px-3"
+      icon={<Send />}
+      label={translate('send', lang)}
+      labelMode="responsive-compact"
       onClick={onSend}
       disabled={!targetTransportLabel}
-      title={!targetTransportLabel ? t(lang, 'noTransportNode') : undefined}
-    >
-      {t(lang, 'send')}
-    </button>
+      title={!targetTransportLabel ? translate('noTransportNode', lang) : translate('send', lang)}
+    />
   );
 
   const renderTargetLabel = () => (
     <span
-      className="text-xs text-text-secondary whitespace-nowrap font-mono max-w-[160px] truncate"
-      title={t(lang, 'targetTransport')}
+      className="flex-shrink-0 text-xs text-text-secondary whitespace-nowrap font-mono max-w-[160px] truncate"
+      title={translate('targetTransport', lang)}
     >
-      → {targetTransportLabel ?? t(lang, 'noTransportNode')}
+      → {targetTransportLabel ?? translate('noTransportNode', lang)}
     </span>
   );
 
   if (compact) {
     return (
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs text-text-secondary">{t(lang, 'appendSuffix')}</span>
+      <div className="responsive-toolbar flex flex-col gap-1.5">
+        <span className="text-xs text-text-secondary">{translate('appendSuffix', lang)}</span>
         {renderAppendOptions(true)}
         {renderTargetLabel()}
         {renderSendInput()}
@@ -93,11 +99,11 @@ export function RawDataViewSendPanel({
   }
 
   return (
-    <div className="flex gap-1.5 p-1.5 items-center border-t border-border bg-bg-panel-header flex-shrink-0">
+    <HorizontalScrollArea shellClassName="flex-shrink-0" className="responsive-toolbar flex flex-nowrap gap-1.5 p-1.5 items-center border-t border-border bg-bg-panel-header">
       {renderAppendOptions()}
       {renderTargetLabel()}
       {renderSendInput()}
       {renderSendButton()}
-    </div>
+    </HorizontalScrollArea>
   );
 }

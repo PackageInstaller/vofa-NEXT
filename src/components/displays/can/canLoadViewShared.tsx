@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { useAppStore } from '../../../store/appStore';
-import { t } from '../../../i18n';
+import { translate } from '../../../i18n';
 import { activateOnKeyboard } from '../../../lib/utils/a11y';
+import { CAN_BITRATE_BPS } from '../../../lib/can/canBitrate';
 import type { CanLoadSnapshot, CanIdLoadHistory } from '../../../types';
 
 /// 窗口预设
@@ -13,14 +14,13 @@ export const WINDOW_PRESETS: { label: string; value: number }[] = [
   { label: '10s', value: 10_000_000 },
 ];
 
-/// 波特率预设
-export const BITRATE_PRESETS: { label: string; value: number }[] = [
-  { label: '100k', value: 100_000 },
-  { label: '125k', value: 125_000 },
-  { label: '250k', value: 250_000 },
-  { label: '500k', value: 500_000 },
-  { label: '1M', value: 1_000_000 },
-];
+/// 波特率预设 — 由 CAN_BITRATE_BPS 派生, 与后端速率变体自动保持一致
+export const BITRATE_PRESETS: { label: string; value: number }[] = Object.entries(
+  CAN_BITRATE_BPS,
+).map(([name, bps]) => ({
+  label: name.slice('Bps'.length).replace(/m$/, 'M'),
+  value: bps,
+}));
 
 /// 告警阈值预设
 export const THRESHOLD_PRESETS: { label: string; value: number }[] = [
@@ -85,15 +85,15 @@ export function IdLoadDistribution({
     <div className="bg-bg-panel-header rounded border border-border p-3">
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs text-text-secondary uppercase tracking-wider">
-          {t(lang, 'canLoadPerId')}
+          {translate('canLoadPerId', lang)}
         </span>
         <span className="text-xs text-text-secondary font-mono">
-          {perId.length} IDs{selectedId ? ` · ${t(lang, 'canLoadIdFilterHint')}` : ''}
+          {perId.length} IDs{selectedId ? ` · ${translate('canLoadIdFilterHint', lang)}` : ''}
         </span>
       </div>
       {perId.length === 0 ? (
         <div className="flex items-center justify-center h-32 text-text-secondary text-xs rounded border border-dashed border-border">
-          {t(lang, 'noCanFrames')}
+          {translate('noCanFrames', lang)}
         </div>
       ) : (
         <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
@@ -111,12 +111,12 @@ export function IdLoadDistribution({
                   isSelected
                     ? 'bg-accent/20 border border-accent'
                     : 'border border-transparent hover:bg-bg-hover'
-                } ${selectedId && !isSelected ? 'opacity-50' : ''}`}
+                } ${selectedId && !isSelected ? 'opacity-disabled' : ''}`}
                 onClick={() => onSelectId(s.id, s.extended)}
                 onKeyDown={activateOnKeyboard}
                 role="button"
                 tabIndex={0}
-                title={t(lang, 'canLoadIdFilterHint')}
+                title={translate('canLoadIdFilterHint', lang)}
               >
                 <span className="text-text-bright truncate">
                   0x{s.extended

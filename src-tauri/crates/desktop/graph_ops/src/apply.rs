@@ -1,25 +1,25 @@
 //! 图提交核心 — 页签图整体编译提交 / 合并 BytePlan 重建
 //!
-//! 层级: L3 app。不含任何 `#[tauri::command]`; `app` 参数仅用于可选的事件
-//! emit (`None` 供测试与启动恢复静默提交)。
+//! 层级: L3 app。不含任何 `#[tauri::command]`; `sink` 参数仅用于可选的事件
+//! emit (`None` 供测试与启动恢复静默提交), 端口实现由组合根注入。
 
 use app::{AppState, SourceGraphs, SourceNodeHint, TabSourceGraph, WidgetRecord, WorkspaceState};
 use buffer_graph::Edge;
-use data_model::{Error, Result};
-use error::ConfigError;
-use events::emit_graph_derived;
+
+use error::Result;
+use error::{AppError as Error, ConfigError};
+use events::{BackendEventSink, emit_graph_derived, emit_payload};
+use graph::BytePlan;
+use kind::{NodeDef, NodeKind};
+use pipeline::DataPlaneState;
 use pipeline::data_plane::frame_dispatch;
 use pipeline::decoder_feed::sync_decoders_now;
-use pipeline::BytePlan;
-use pipeline::DataPlaneState;
-use pipeline::{NodeDef, NodeKind};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
 
 use crate::{
-    compute_derived, inject_protocol_sources, CompileState, GraphCompileEvent, GraphDerived,
-    GraphSourceEvent, GRAPH_SOURCE_EVENT,
+    CompileState, GRAPH_SOURCE_EVENT, GraphCompileEvent, GraphDerived, GraphSourceEvent,
+    compute_derived, inject_protocol_sources,
 };
 
 // ============ 节点图 (后端化重构) ============
@@ -29,9 +29,9 @@ use crate::{
 /// 节点 id 在工作区内唯一；任一页签提交后重建共享运行平面。
 /// 孤儿节点 (图删除后残留) 的运行时资源由 `DataPlaneState::reconcile` 清理。
 fn rebuild_byte_plan(
-    graphs: &Arc<parking_lot::Mutex<HashMap<String, pipeline::CompiledGraph>>>,
+    graphs: &Arc<parking_lot::Mutex<HashMap<String, graph::CompiledGraph>>>,
     candidate: &std::collections::HashMap<String, NodeDef>,
-    new_tab: Option<(&str, &pipeline::CompiledGraph)>,
+    new_tab: Option<(&str, &graph::CompiledGraph)>,
 ) -> Result<BytePlan> {
     let mut byte_edges: Vec<Edge> = Vec::new();
     {
@@ -47,7 +47,7 @@ fn rebuild_byte_plan(
         byte_edges.extend(g.byte_edges());
     }
     // 合并后的运行时节点索引先建 HIR (边分类应与各页签编译期一致), 再投影字节平面
-    let typed = pipeline::TypedGraph::build(candidate.values().cloned(), byte_edges)
+    let typed = graph::TypedGraph::build(candidate.values().cloned(), byte_edges)
         .map_err(|e| Error::Config(ConfigError::BytePlanCompile(Box::new(e))))?;
     BytePlan::build(&typed).map_err(|e| Error::Config(ConfigError::BytePlanCompile(Box::new(e))))
 }
@@ -71,7 +71,7 @@ fn rebuild_byte_plan(
 #[allow(clippy::too_many_arguments)]
 pub async fn apply_tab_graph(
     state: &AppState,
-    app: Option<&AppHandle>,
+    sink: Option<&dyn BackendEventSink>,
     tab_id: String,
     nodes: Vec<NodeDef>,
     edges: Vec<Edge>,
@@ -85,7 +85,7 @@ pub async fn apply_tab_graph(
         &state.data_plane,
         &state.source_graphs,
         &state.workspace,
-        app,
+        sink,
         tab_id,
         nodes,
         edges,
@@ -109,12 +109,12 @@ pub async fn apply_tab_graph(
 #[allow(clippy::implicit_hasher)]
 #[allow(clippy::too_many_arguments)]
 pub async fn apply_tab_graph_parts(
-    graphs: &Arc<parking_lot::Mutex<HashMap<String, pipeline::CompiledGraph>>>,
+    graphs: &Arc<parking_lot::Mutex<HashMap<String, graph::CompiledGraph>>>,
     graphs_version: &Arc<std::sync::atomic::AtomicU64>,
     data_plane: &DataPlaneState,
     source_graphs: &SourceGraphs,
     workspace: &WorkspaceState,
-    app: Option<&AppHandle>,
+    sink: Option<&dyn BackendEventSink>,
     tab_id: String,
     nodes: Vec<NodeDef>,
     edges: Vec<Edge>,
@@ -131,6 +131,11 @@ pub async fn apply_tab_graph_parts(
             return Err(Error::Config(ConfigError::GraphVersionConflict { current }));
         }
     }
+
+    let mut nodes = nodes;
+    let mut compile_edges = edges.clone();
+    crate::device_tree::project(&mut nodes, &mut compile_edges)?;
+    crate::simulation::resolve(&mut nodes, &compile_edges);
 
     let mut node_ids = std::collections::HashSet::with_capacity(nodes.len());
     for node in &nodes {
@@ -165,29 +170,30 @@ pub async fn apply_tab_graph_parts(
 
     // 1. ProtocolSource 自动注入 (后端单一权威 — 前端不再下发 ProtocolSource NodeDef)
     let mut compile_nodes = nodes.clone();
-    compile_nodes.extend(inject_protocol_sources(&nodes, &edges));
+    compile_nodes.extend(inject_protocol_sources(&nodes, &compile_edges));
 
     // 2. 本 tab 数值图编译 — 失败时构造 `CompileReport` 并 emit `graph:compile` 事件,
     //    真实编译错误原样返回 (占位假错误会吞掉域不匹配等可用原因)
-    let compiled =
-        match pipeline::CompiledGraph::compile(tab_id.clone(), compile_nodes, edges.clone()) {
-            Ok(g) => g,
-            Err(e) => {
-                let report = error::CompileReport::new(e.clone());
-                if let Some(app) = app {
-                    let _ = app.emit(
-                        crate::GRAPH_COMPILE_EVENT,
-                        GraphCompileEvent {
-                            tab_id: tab_id.clone(),
-                            state: CompileState::Error,
-                            queued_seq: 0,
-                            report: Some(report),
-                        },
-                    );
-                }
-                return Err(Error::Config(ConfigError::GraphCompile(Box::new(e))));
+    let compiled = match graph::CompiledGraph::compile(tab_id.clone(), compile_nodes, compile_edges)
+    {
+        Ok(g) => g,
+        Err(e) => {
+            let report = error::CompileReport::new(e.clone());
+            if let Some(sink) = sink {
+                emit_payload(
+                    sink,
+                    crate::GRAPH_COMPILE_EVENT,
+                    &GraphCompileEvent {
+                        tab_id: tab_id.clone(),
+                        state: CompileState::Error,
+                        queued_seq: 0,
+                        report: Some(report),
+                    },
+                );
             }
-        };
+            return Err(Error::Config(ConfigError::GraphCompile(Box::new(e))));
+        }
+    };
 
     // 3. 候选运行时节点索引: 移除该 tab 旧节点 → 插入新节点
     // ProtocolSource 是页签数值平面的帧源引用，不参与字节平面，不进运行时索引
@@ -195,7 +201,7 @@ pub async fn apply_tab_graph_parts(
     let mut candidate = data_plane.global_nodes.lock().clone();
     candidate.retain(|_, n| n.tab_id != tab_id);
     for n in &nodes {
-        if matches!(n.kind, pipeline::NodeKind::ProtocolSource { .. }) {
+        if matches!(n.kind, kind::NodeKind::ProtocolSource { .. }) {
             continue;
         }
         candidate.insert(n.id.clone(), n.clone());
@@ -257,8 +263,8 @@ pub async fn apply_tab_graph_parts(
         nodes: derived_nodes,
         version,
     };
-    if let Some(app) = app {
-        emit_graph_derived(app, &derived);
+    if let Some(sink) = sink {
+        emit_graph_derived(sink, &derived);
         // 权威源图回推 — 前端画布据此收敛 (多写入方: 前端提交 / 拓扑 op / MCP)。
         // 携带 widget 配置记录与画布位置: 画布按此重建该 tab 完整视图
         // (外部提交的纯 widget 图也可完整渲染)
@@ -267,18 +273,20 @@ pub async fn apply_tab_graph_parts(
             .get(&tab_id)
             .map(|g| (g.documents.clone(), g.edges.clone()))
             .unwrap_or_default();
-        let _ = app.emit(
+        emit_payload(
+            sink,
             GRAPH_SOURCE_EVENT,
-            GraphSourceEvent {
+            &GraphSourceEvent {
                 tab_id: tab_id.clone(),
                 version,
                 documents,
                 edges,
             },
         );
-        let _ = app.emit(
+        emit_payload(
+            sink,
             crate::GRAPH_COMPILE_EVENT,
-            GraphCompileEvent {
+            &GraphCompileEvent {
                 tab_id: tab_id.clone(),
                 state: CompileState::Ok,
                 queued_seq: 0,
@@ -359,12 +367,12 @@ fn recording_domain(source: &NodeDef, handle: &str) -> Option<recording::Domain>
     if matches!(source.kind, NodeKind::Protocol { .. }) && handle == "str" {
         return Some(recording::Domain::String);
     }
-    Some(match pipeline::port_domain(&source.kind, handle, true) {
-        pipeline::PortDomain::Points => return None,
-        pipeline::PortDomain::Bytes => recording::Domain::Bytes,
-        pipeline::PortDomain::String => recording::Domain::String,
-        pipeline::PortDomain::Spectrum => recording::Domain::Spectrum,
-        pipeline::PortDomain::F32 => recording::Domain::Float,
+    kind::port_domain(&source.kind, handle, true).and_then(|domain| match domain {
+        kind::PortDomain::Points => None,
+        kind::PortDomain::Bytes => Some(recording::Domain::Bytes),
+        kind::PortDomain::String => Some(recording::Domain::String),
+        kind::PortDomain::Spectrum => Some(recording::Domain::Spectrum),
+        kind::PortDomain::F32 => Some(recording::Domain::Float),
     })
 }
 
@@ -372,7 +380,7 @@ fn recording_domain(source: &NodeDef, handle: &str) -> Option<recording::Domain>
 /// `graph::remove_tab_graph`, 本体抽出以便复用与测试
 pub async fn apply_remove_tab_graph(
     state: &AppState,
-    app: Option<&AppHandle>,
+    sink: Option<&dyn BackendEventSink>,
     tab_id: &str,
 ) -> Result<GraphDerived> {
     state.graphs.lock().remove(tab_id);
@@ -407,8 +415,8 @@ pub async fn apply_remove_tab_graph(
         nodes: derived_nodes,
         version,
     };
-    if let Some(app) = app {
-        emit_graph_derived(app, &derived);
+    if let Some(sink) = sink {
+        emit_graph_derived(sink, &derived);
     }
     Ok(derived)
 }

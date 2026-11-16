@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
+import { renderWithI18n } from '../../../test/renderWithI18n';;
 import { memo, type FunctionComponent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore, type AppStore } from '../../../store/appStore';
@@ -75,9 +76,10 @@ describe('chrome store subscription granularity', () => {
   });
 
   describe('Sidebar (订阅 sidebar slice)', () => {
-    it('data slice 更新不重渲染', () => {
+    it('data slice 更新不重渲染', async () => {
       const spy = spyMemoRender(Sidebar as unknown as { type: FunctionComponent });
-      render(<Sidebar view="widgets" />);
+      renderWithI18n(<Sidebar view="category" />);
+      await act(async () => { await Promise.resolve(); });
       expect(spy).toHaveBeenCalledTimes(1);
 
       bumpDataVersion();
@@ -86,9 +88,10 @@ describe('chrome store subscription granularity', () => {
       expect(spy).toHaveBeenCalledTimes(1);
     });
 
-    it('自身 slice (lang) 更新时重渲染', () => {
+    it('自身 slice (lang) 更新时重渲染', async () => {
       const spy = spyMemoRender(Sidebar as unknown as { type: FunctionComponent });
-      render(<Sidebar view="widgets" />);
+      renderWithI18n(<Sidebar view="category" />);
+      await act(async () => { await Promise.resolve(); });
       expect(spy).toHaveBeenCalledTimes(1);
 
       act(() => useAppStore.setState({ lang: 'en' }));
@@ -100,7 +103,7 @@ describe('chrome store subscription granularity', () => {
   describe('StatusBar (订阅 connection/protocol slice)', () => {
     it('data slice 更新不重渲染', () => {
       const spy = spyMemoRender(StatusBar as unknown as { type: FunctionComponent });
-      render(<StatusBar />);
+      renderWithI18n(<StatusBar />);
       expect(spy).toHaveBeenCalledTimes(1);
 
       bumpDataVersion();
@@ -110,7 +113,7 @@ describe('chrome store subscription granularity', () => {
 
     it('自身 slice (nodeStats) 更新时重渲染', () => {
       const spy = spyMemoRender(StatusBar as unknown as { type: FunctionComponent });
-      render(<StatusBar />);
+      renderWithI18n(<StatusBar />);
       expect(spy).toHaveBeenCalledTimes(1);
 
       act(() =>
@@ -131,7 +134,7 @@ describe('chrome store subscription granularity', () => {
   describe('ActivityBar (订阅 sidebar/settings/onboarding slice)', () => {
     it('data slice 更新不重渲染', () => {
       const spy = spyMemoRender(ActivityBar as unknown as { type: FunctionComponent });
-      render(<ActivityBar activeView="widgets" onSelect={() => { return undefined; }} />);
+      renderWithI18n(<ActivityBar activeView="category" onSelect={() => { return undefined; }} />);
       expect(spy).toHaveBeenCalledTimes(1);
 
       bumpDataVersion();
@@ -141,7 +144,7 @@ describe('chrome store subscription granularity', () => {
 
     it('自身 slice (lang) 更新时重渲染', () => {
       const spy = spyMemoRender(ActivityBar as unknown as { type: FunctionComponent });
-      render(<ActivityBar activeView="widgets" onSelect={() => { return undefined; }} />);
+      renderWithI18n(<ActivityBar activeView="category" onSelect={() => { return undefined; }} />);
       expect(spy).toHaveBeenCalledTimes(1);
 
       act(() => useAppStore.setState({ lang: 'en' }));
@@ -170,7 +173,7 @@ describe('chrome store subscription granularity', () => {
 
     it('重命名卡片 2 的 Tab 不重渲染卡片 1', () => {
       const spy = spyMemoRender(CardTabsProbe as unknown as { type: FunctionComponent });
-      render(
+      renderWithI18n(
         <>
           <CardTabsProbe cardId="card-1" />
           <CardTabsProbe cardId="card-2" />
@@ -187,7 +190,7 @@ describe('chrome store subscription granularity', () => {
 
     it('data slice 更新不重渲染 control 卡片探针', () => {
       const spy = spyMemoRender(CardTabsProbe as unknown as { type: FunctionComponent });
-      render(
+      renderWithI18n(
         <>
           <CardTabsProbe cardId="card-1" />
           <CardTabsProbe cardId="card-2" />

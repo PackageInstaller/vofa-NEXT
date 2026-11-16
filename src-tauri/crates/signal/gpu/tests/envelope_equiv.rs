@@ -6,7 +6,8 @@
 
 #![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)] // LCG 伪随机数据流: 有意截断
 
-use gpu::{envelope_minmax, envelope_minmax_cpu, GpuContext};
+use gpu::{GpuContext, envelope_minmax};
+use waveform::envelope_minmax_cpu;
 
 /// 确定性伪随机波形 (正弦 + LCG 噪声, 每 997 点注入 NaN, 每 1273 点注入 ±0)
 fn waveform(n: usize) -> Vec<f32> {
@@ -21,13 +22,16 @@ fn waveform(n: usize) -> Vec<f32> {
                 return if i % 2 == 0 { 0.0 } else { -0.0 };
             }
             let noise = ((seed >> 8) % 20_000) as f32 / 100.0 - 100.0;
-            (f32::from((i % 10_000) as u16) * 0.001 * std::f32::consts::TAU).sin() + noise * 0.01
+            noise.mul_add(
+                0.01,
+                (f32::from((i % 10_000) as u16) * 0.001 * std::f32::consts::TAU).sin(),
+            )
         })
         .collect()
 }
 
 /// 位级等价断言 (含 ±inf / ±0 的符号位)
-fn assert_envelope_eq(name: &str, gpu: &gpu::Envelope, cpu: &gpu::Envelope) {
+fn assert_envelope_eq(name: &str, gpu: &waveform::Envelope, cpu: &waveform::Envelope) {
     assert_eq!(gpu.min.len(), cpu.min.len(), "{name}: min 长度");
     assert_eq!(gpu.count, cpu.count, "{name}: count");
     for i in 0..cpu.min.len() {

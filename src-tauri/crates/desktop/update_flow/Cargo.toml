@@ -1,9 +1,13 @@
 [package]
-name = "update_flow"
+name = "lissio-update-flow"
 description = "Lissio 应用更新检查与下载流程 (stable/beta 通道)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "update_flow"
 
 [lints]
 workspace = true
@@ -15,7 +19,6 @@ reqwest = { workspace = true, features = ["json", "rustls"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 error = { workspace = true }
-data_model = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

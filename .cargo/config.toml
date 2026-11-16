@@ -1,0 +1,5 @@
+# Keep Rust test threads bounded so timing-sensitive tests do not fight over cores.
+# Build parallelism is deliberately uncapped: cargo defaults to the logical CPU count,
+# which is the maximum available. `cargo -j N` / CARGO_BUILD_JOBS still override it.
+[env]
+RUST_TEST_THREADS = { value = "1", force = false }

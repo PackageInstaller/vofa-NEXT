@@ -13,12 +13,13 @@ import {
   Usb,
   Sparkles,
   Rocket,
+  Type,
   Upload,
   type LucideIcon,
 } from 'lucide-react';
-import { ask, confirm } from '@tauri-apps/plugin-dialog';
+import { platform } from '../../lib/platform';
 import { useAppStore } from '../../store/appStore';
-import { t } from '../../i18n';
+import { translate } from '../../i18n';
 import { QUICK_START_TEMPLATES, type QuickStartTemplate } from '../../lib/quickstart/templates';
 import { applyTemplate, type TemplateApplyMode } from '../../lib/quickstart/applyTemplate';
 import { readSnapshotFromFile, type AppSnapshot } from '../../lib/tauri/appExport';
@@ -29,52 +30,54 @@ const TEMPLATE_ICONS: Record<string, LucideIcon> = {
   filter: Waves,
   can: Cpu,
   serial: Usb,
+  'text-protocol': Type,
   demo: Sparkles,
 };
 
 export function QuickStartPanel() {
   const lang = useAppStore((s) => s.lang);
-  const setSidebarView = useAppStore((s) => s.setSidebarView);
+  const openCategory = useAppStore((s) => s.openCategory);
 
-  /// 应用快照并切换到控件画布视图
+  /// 应用快照并切换到控件分类页
   const apply = async (snap: AppSnapshot, mode: TemplateApplyMode) => {
     await applyTemplate(snap, mode);
-    setSidebarView('widgets');
+    openCategory('display');
   };
 
   /// 通过系统对话框确认应用方式: 先询问「替换」(推荐), 取消则再询问「合并」
   const chooseAndApply = async (snap: AppSnapshot, name: string) => {
-    const title = t(lang, 'templateApplyTitle');
-    const replace = await confirm(
-      `${name}\n\n${t(lang, 'templateApplyReplaceConfirm')}`,
+    const title = translate('templateApplyTitle', lang);
+    const replace = await platform.confirm(
+      `${name}\n\n${translate('templateApplyReplaceConfirm', lang)}`,
       { title, kind: 'warning' }
     );
     if (replace) {
       await apply(snap, 'replace');
       return;
     }
-    const merge = await ask(
-      `${name}\n\n${t(lang, 'templateApplyMergePrompt')}`,
+    const merge = await platform.ask(
+      `${name}\n\n${translate('templateApplyMergePrompt', lang)}`,
       { title, kind: 'info' }
     );
     if (merge) await apply(snap, 'merge');
   };
 
   const requestApply = (tpl: QuickStartTemplate) => {
-    void chooseAndApply(tpl.build(), t(lang, tpl.nameKey));
+    // 模板经后端 prepare 批量产出文档 — 构建为异步
+    void tpl.build().then((snap) => chooseAndApply(snap, translate(tpl.nameKey, lang)));
   };
 
   const requestImport = async () => {
     const snap = await readSnapshotFromFile();
     if (!snap) return;
-    const name = snap.workspace?.tabs[0]?.name ?? t(lang, 'templateImportName');
+    const name = snap.workspace?.tabs[0]?.name ?? translate('templateImportName', lang);
     await chooseAndApply(snap, name);
   };
 
   return (
     <div className="flex flex-col h-full overflow-hidden gap-3" data-tour="quickstart-panel">
       <div className="text-xs text-text-secondary leading-relaxed">
-        {t(lang, 'quickStartDesc')}
+        {translate('quickStartDesc', lang)}
       </div>
 
       {/* 模板列表 */}
@@ -84,22 +87,22 @@ export function QuickStartPanel() {
           return (
             <div
               key={tpl.id}
-              className="group bg-bg-input border border-border-subtle rounded-md p-2.5 flex items-start gap-2.5 transition-all duration-150 hover:bg-bg-hover hover:border-accent/50"
+              className="group bg-bg-input border border-border-subtle rounded-md p-2.5 flex items-start gap-2.5 motion-transition hover:bg-bg-hover hover:border-accent/50"
             >
               <div className="w-9 h-9 rounded-sm flex items-center justify-center bg-accent/15 text-accent flex-shrink-0 [&_svg]:w-4 [&_svg]:h-4">
                 <Icon size={16} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-text-bright">{t(lang, tpl.nameKey)}</div>
+                <div className="text-sm font-medium text-text-bright">{translate(tpl.nameKey, lang)}</div>
                 <div className="text-[11px] text-text-secondary leading-snug mt-0.5">
-                  {t(lang, tpl.descKey)}
+                  {translate(tpl.descKey, lang)}
                 </div>
               </div>
               <button
                 className="shrink-0 px-2.5 h-7 bg-bg-button text-text-inverse border-none rounded cursor-pointer text-xs transition-colors hover:bg-bg-button-hover"
                 onClick={() => requestApply(tpl)}
               >
-                {t(lang, 'templateApply')}
+                {translate('templateApply', lang)}
               </button>
             </div>
           );
@@ -112,7 +115,7 @@ export function QuickStartPanel() {
         onClick={() => void requestImport()}
       >
         <Upload size={14} />
-        <span>{t(lang, 'templateImportFile')}</span>
+        <span>{translate('templateImportFile', lang)}</span>
       </button>
     </div>
   );

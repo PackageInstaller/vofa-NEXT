@@ -1,47 +1,67 @@
-//! 设置 store — 基于 zustand + tauri-plugin-store
-//!
-//! 启动时调用 load() 从磁盘加载, 每次 update 后 save() (防抖 300ms)
-//! 通过 subscribeAppearance() 自动应用 appearance 到 CSS 变量
+//! Settings load and acknowledged persistence through the shared backend.
+//! Failed reads never authorize writing defaults; critical onboarding choices save immediately.
 
 import { create } from 'zustand';
-import { LazyStore } from '@tauri-apps/plugin-store';
-import type {
-  AppSettings} from '../settings/defaults';
+import { platform, type PlatformStore } from '../lib/platform';
+import type { AppSettings } from '../settings/defaults';
 import {
   DEFAULT_SETTINGS,
   deepMergeSettings,
 } from '../settings/defaults';
-import { applyAppearance } from '../settings/applyTheme';
+import { migrateLegacyFontDefaults } from '../settings/fontDefaults';
 import {
-  DARK_THEME,
-  THEME_TOKENS,
-  type ThemeDefinition,
-  type ThemeToken,
-} from '../settings/theme';
-import { api, type PipelineConfig } from '../lib/tauri/tauri';
+  DEFAULT_CONFIG_GUIDE_SOURCES,
+  readConfigGuideSources,
+  type ConfigGuideSources,
+} from '../settings/configGuideSources';
+import { applyAppearance } from '../settings/applyTheme';
+import { api, type PipelineConfig, type RecordingCleanupPolicy } from '../lib/tauri/tauri';
 import { setRawDataPreviewCapacity } from '../lib/buffers/rawDataPreviewRegistry';
 import { canFrameBuffer } from '../lib/buffers/canBuffer';
 import { logicSampleBuffer } from '../lib/buffers/logicBuffer';
 import { transitionStore } from '../lib/utils/transitionStore';
 import { useAppStore } from './appStore';
+import { createSettingsModalSlice, type SettingsModalSlice } from './settingsModalSlice';
+import { translate, type Lang } from '../i18n';
+import { notify, formatError } from '../lib/tauri/notifications';
+
+export { migrateLegacyFontDefaults } from '../settings/fontDefaults';
 
 const STORE_FILE = 'settings.json';
 const STORE_KEY = 'app';
 
-/// 单例 LazyStore — 多次调用共享底层连接
-let storeInstance: LazyStore | null = null;
-function getStore(): LazyStore {
-  storeInstance ??= new LazyStore(STORE_FILE);
+/// The client resolves the currently authenticated connection on every access.
+let storeInstance: PlatformStore | null = null;
+function getStore(): PlatformStore {
+  storeInstance ??= platform.createStore(STORE_FILE);
   return storeInstance;
 }
 
 /// 防抖保存计时器
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let loadSequence = 0;
+let changeRevision = 0;
+let nextSaveId = 0;
+let pendingSave: { id: number; revision: number; promise: Promise<boolean> } | null = null;
+let loadNotice: string | null = null;
+let saveNotice: string | null = null;
 
-/// API key 不入 settings.json — 真实值存系统钥匙串, 磁盘副本恒为空串。
-/// 运行内存中的 settings.ai.apiKey 保留真实值 (随请求传给后端)。
+function scheduleSave(immediate = false): void {
+  changeRevision += 1;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  const state = useSettingsStore.getState();
+  if (!state.loaded || state.loadError !== null) return;
+  if (immediate) void state.save();
+  else saveTimer = setTimeout(() => { void useSettingsStore.getState().save(); }, 300);
+}
+
+/// API key 不入 settings.json，也不从后端读回。该字段仅作为覆盖写入控件的
+/// 临时输入；对话请求由后端 SecretStore 注入有效密钥。
 function sanitizeForPersist(settings: AppSettings): AppSettings {
-  return { ...settings, ai: { ...settings.ai, apiKey: '' } };
+  const ai = { ...settings.ai } as AppSettings['ai'] & { systemPrompt?: string };
+  delete ai.systemPrompt;
+  return { ...settings, ai: { ...ai, apiKey: '' } };
 }
 
 type KeychainPermissionRetryError = 'denied' | 'failed' | null;
@@ -60,19 +80,13 @@ interface HydrateApiKeyResult {
   accessDenied: boolean;
 }
 
-/// 启动水合: 从钥匙串读取当前适配器的 API key;
-/// 兼容迁移 — 旧版本明文存于 settings.json 的 key 迁入钥匙串 (仅当钥匙串为空)。
-/// 同时保留结构化的授权拒绝信号,供主窗口按启动顺序显示说明。
+/// 启动水合: 只读取密钥状态。
+/// 保留结构化的授权拒绝信号,供主窗口按启动顺序显示说明。
 async function hydrateApiKey(settings: AppSettings): Promise<HydrateApiKeyResult> {
   try {
-    const legacy = settings.ai.apiKey;
-    let stored = await api.aiKeychainGet(settings.ai.adapter);
-    if (!stored && legacy) {
-      await api.aiKeychainSet(settings.ai.adapter, legacy);
-      stored = legacy;
-    }
+    await api.aiSecretStatus(settings.ai.adapter);
     return {
-      settings: { ...settings, ai: { ...settings.ai, apiKey: stored ?? '' } },
+      settings: { ...settings, ai: { ...settings.ai, apiKey: '' } },
       accessDenied: false,
     };
   } catch (error) {
@@ -84,27 +98,27 @@ async function hydrateApiKey(settings: AppSettings): Promise<HydrateApiKeyResult
   }
 }
 
-interface SettingsStore {
+export type { AiSettingsSection } from './settingsModalSlice';
+
+interface SettingsStore extends SettingsModalSlice {
   settings: AppSettings;
-  isOpen: boolean;
-  isAboutOpen: boolean;
-  activeCategory: keyof AppSettings;
-  searchQuery: string;
+  /// 配置引导的取值来源与文档存在性 (基于最近一次读取的持久化文档判定,
+  /// 见 settings/configGuideSources)。
+  configGuideSources: ConfigGuideSources;
+  /// Initialization has settled, including failure, so the main window can open.
   loaded: boolean;
+  loadError: string | null;
+  saveError: string | null;
+  saving: boolean;
   keychainPermissionPromptOpen: boolean;
   keychainPermissionRetrying: boolean;
   keychainPermissionRetryError: KeychainPermissionRetryError;
 
-  open: (category?: keyof AppSettings) => void;
-  close: () => void;
-  openAbout: () => void;
-  closeAbout: () => void;
   dismissKeychainPermissionPrompt: (dontRemind: boolean) => void;
   retryKeychainPermission: () => Promise<void>;
-  setActiveCategory: (c: keyof AppSettings) => void;
-  setSearchQuery: (q: string) => void;
 
   load: () => Promise<void>;
+  save: () => Promise<boolean>;
   update: <K extends keyof AppSettings>(
     category: K,
     field: keyof AppSettings[K],
@@ -163,97 +177,72 @@ function applyPipelineConfig(settings: AppSettings) {
   );
 }
 
-/// 历史版本默认字体 — 若用户未自定义过(仍是旧默认), 迁移到最新默认
-const LEGACY_DEFAULT_UI_FONTS = [
-  "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  "'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-];
-const LEGACY_DEFAULT_MONO_FONTS = [
-  "'Cascadia Code', 'Fira Code', 'SF Mono', Menlo, monospace",
-  "'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'SF Mono', Menlo, monospace",
-];
-
-/// 防御性 token 迁移映射: 历史版本曾用过的旧 token 名 -> 当前名。
-/// 当前语义层为纯增量 (未重命名任何可持久化 token), 映射保持为空;
-/// 未来若重命名 THEME_TOKENS 中的 key, 在此补条目即可平滑迁移已保存的自定义主题。
-const LEGACY_TOKEN_RENAMES: Readonly<Record<string, ThemeToken>> = {};
-
-/// 归一化自定义主题: 应用旧 key 重命名 + 补齐缺失 token。
-/// 防御旧版本/损坏数据 — 保证每个主题都持有完整 token 集合 (新语义结构)。
-export function migrateCustomTheme(theme: ThemeDefinition): ThemeDefinition {
-  const tokens: Record<string, string> = { ...theme.tokens };
-  for (const [oldKey, newKey] of Object.entries(LEGACY_TOKEN_RENAMES)) {
-    if (oldKey in tokens && !(newKey in tokens)) {
-      tokens[newKey] = tokens[oldKey];
-    }
-    delete tokens[oldKey];
-  }
-  for (const token of THEME_TOKENS) {
-    if (!(token in tokens)) {
-      tokens[token] = DARK_THEME.tokens[token];
-    }
-  }
-  return { ...theme, tokens: tokens };
+/// data 分类的录制清理设置 → 后端 RecordingCleanupPolicy;
+/// 天数转为 "结束时间早于 now-N 天" 的微秒截止线, 0 = 规则关闭
+export function toCleanupPolicy(d: AppSettings['data']): RecordingCleanupPolicy {
+  const days = Math.max(0, Math.floor(d.cleanupOlderThanDays));
+  const keep = Math.max(0, Math.floor(d.cleanupKeepLatest));
+  return {
+    session_ids: [],
+    delete_stopped: d.cleanupDeleteStopped,
+    delete_failed: d.cleanupDeleteFailed,
+    older_than_us: days > 0 ? (Date.now() - days * 86_400_000) * 1000 : null,
+    keep_latest: keep > 0 ? keep : null,
+  };
 }
 
-function migrateSettings(settings: AppSettings): AppSettings {
-  const appearance = { ...settings.appearance };
-  if (LEGACY_DEFAULT_UI_FONTS.includes(appearance.uiFontFamily)) {
-    appearance.uiFontFamily = DEFAULT_SETTINGS.appearance.uiFontFamily;
+/// 推送录制存储设置到后端并执行一次自动清理 — 启动回放与设置变更共用。
+/// 总开关 (`recordingEnabled`) 任意运行态都可热更新; 改数据库目录在运行中被
+/// 后端拒绝 (下次暂停/启动生效); 清理只作用于终态会话 (当前活跃会话始终保留)。
+async function runRecordingApply(settings: AppSettings) {
+  const data = settings.data;
+  try {
+    await api.applyRecordingSettings(
+      data.recordingDatabaseDir,
+      data.continueEmptySession,
+      data.recordingEnabled
+    );
+  } catch (e: unknown) {
+    console.warn('[settings] 应用录制存储设置失败:', e);
   }
-  if (LEGACY_DEFAULT_MONO_FONTS.includes(appearance.monoFontFamily)) {
-    appearance.monoFontFamily = DEFAULT_SETTINGS.appearance.monoFontFamily;
+  // 总开关关闭时没有连接可用, 清理必然失败且没有意义
+  if (!data.recordingEnabled) return;
+  const policy = toCleanupPolicy(data);
+  const enabled =
+    policy.delete_stopped ||
+    policy.delete_failed ||
+    policy.older_than_us !== null ||
+    policy.keep_latest !== null;
+  if (!enabled) return;
+  try {
+    await api.cleanupRecordingSessions(policy);
+  } catch (e: unknown) {
+    console.warn('[settings] 录制会话自动清理失败:', e);
   }
-  if (appearance.customThemes?.length) {
-    appearance.customThemes = appearance.customThemes.map(migrateCustomTheme);
-  }
-  const rawPerformance = settings.performance as AppSettings['performance'] & Record<string, unknown>;
-  const performance: AppSettings['performance'] = {
-    mode: 'auto',
-    maxWorkers:
-      typeof rawPerformance.maxWorkers === 'number'
-        ? rawPerformance.maxWorkers
-        : DEFAULT_SETTINGS.performance.maxWorkers,
-    evalWorkers:
-      typeof rawPerformance.evalWorkers === 'number'
-        ? rawPerformance.evalWorkers
-        : DEFAULT_SETTINGS.performance.evalWorkers,
-    memoryBudgetMb:
-      typeof rawPerformance.memoryBudgetMb === 'number'
-        ? rawPerformance.memoryBudgetMb
-        : DEFAULT_SETTINGS.performance.memoryBudgetMb,
-    previewFpsLimit:
-      typeof rawPerformance.previewFpsLimit === 'number'
-        ? rawPerformance.previewFpsLimit
-        : DEFAULT_SETTINGS.performance.previewFpsLimit,
-    previewBandwidthMbPerSec:
-      typeof rawPerformance.previewBandwidthMbPerSec === 'number'
-        ? rawPerformance.previewBandwidthMbPerSec
-        : DEFAULT_SETTINGS.performance.previewBandwidthMbPerSec,
-  };
-  return { ...settings, appearance, performance };
+}
+
+/// 录制设置副作用防抖 — 数字输入连发编辑 (天数 3 → 30) 只触发一次清理
+let recordingApplyTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleRecordingApply(settings: AppSettings) {
+  if (recordingApplyTimer) clearTimeout(recordingApplyTimer);
+  recordingApplyTimer = setTimeout(() => {
+    recordingApplyTimer = null;
+    void runRecordingApply(settings);
+  }, 800);
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
+  ...createSettingsModalSlice(set, get),
   settings: DEFAULT_SETTINGS,
-  isOpen: false,
-  isAboutOpen: false,
-  activeCategory: 'general',
-  searchQuery: '',
+  configGuideSources: DEFAULT_CONFIG_GUIDE_SOURCES,
   loaded: false,
+  loadError: null,
+  saveError: null,
+  saving: false,
   keychainPermissionPromptOpen: false,
   keychainPermissionRetrying: false,
   keychainPermissionRetryError: null,
 
-  open: (category) =>
-    set({
-      isOpen: true,
-      activeCategory: category ?? get().activeCategory,
-      searchQuery: '',
-    }),
-  close: () => set({ isOpen: false }),
-  openAbout: () => set({ isAboutOpen: true }),
-  closeAbout: () => set({ isAboutOpen: false }),
   dismissKeychainPermissionPrompt: (dontRemind) => {
     if (dontRemind) {
       get().update('general', 'suppressKeychainPermissionReminder', true);
@@ -269,11 +258,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ keychainPermissionRetrying: true, keychainPermissionRetryError: null });
     try {
       const adapter = get().settings.ai.adapter;
-      const key = await api.aiKeychainGet(adapter);
+      await api.aiSecretStatus(adapter);
       set((state) => ({
         settings: {
           ...state.settings,
-          ai: { ...state.settings.ai, apiKey: key ?? '' },
+          ai: { ...state.settings.ai, apiKey: '' },
         },
         keychainPermissionPromptOpen: false,
         keychainPermissionRetrying: false,
@@ -287,61 +276,107 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       });
     }
   },
-  setActiveCategory: (c) => set({ activeCategory: c }),
-  setSearchQuery: (q) => set({ searchQuery: q }),
-
   load: async () => {
+    const sequence = ++loadSequence;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = null;
+    pendingSave = null;
+    set({ loaded: false, loadError: null, saveError: null, saving: false });
     try {
       const raw = await getStore().get<AppSettings>(STORE_KEY);
-      if (raw) {
-        // 与默认值合并, 防止新版本缺失字段
-        const base = migrateSettings(deepMergeSettings(DEFAULT_SETTINGS, raw));
-        const hydrated = await hydrateApiKey(base);
-        const merged = hydrated.settings;
-        set({
-          settings: merged,
-          loaded: true,
-          keychainPermissionPromptOpen:
-            hydrated.accessDenied && !base.general.suppressKeychainPermissionReminder,
-          keychainPermissionRetrying: false,
-          keychainPermissionRetryError: null,
-        });
-        // 将旧版性能字段的一次性迁移结果写回，避免每次启动重复携带废弃键。
-        await getStore().set(STORE_KEY, sanitizeForPersist(merged));
-        applyAppearance(merged.appearance);
-        applyDataCapacity(merged);
-        applyPipelineConfig(merged);
-      } else {
-        const hydrated = await hydrateApiKey(DEFAULT_SETTINGS);
-        const merged = hydrated.settings;
-        set({
-          settings: merged,
-          loaded: true,
-          keychainPermissionPromptOpen:
-            hydrated.accessDenied &&
-            !DEFAULT_SETTINGS.general.suppressKeychainPermissionReminder,
-          keychainPermissionRetrying: false,
-          keychainPermissionRetryError: null,
-        });
-        applyAppearance(merged.appearance);
-        applyDataCapacity(merged);
-        applyPipelineConfig(merged);
-      }
-    } catch (e) {
-      console.warn('[settings] 加载失败, 使用默认值:', e);
+      if (sequence !== loadSequence) return;
+      const configGuideSources = readConfigGuideSources(raw);
+      const base = raw ? deepMergeSettings(DEFAULT_SETTINGS, raw) : structuredClone(DEFAULT_SETTINGS);
+      delete (base.ai as AppSettings['ai'] & { systemPrompt?: string }).systemPrompt;
+      const hydrated = await hydrateApiKey(base);
+      if (sequence !== loadSequence) return;
+      const migrated = migrateLegacyFontDefaults(hydrated.settings);
+      const merged = migrated.settings;
+      set({
+        settings: merged,
+        configGuideSources,
+        loaded: true,
+        loadError: null,
+        keychainPermissionPromptOpen:
+          hydrated.accessDenied && !base.general.suppressKeychainPermissionReminder,
+        keychainPermissionRetrying: false,
+        keychainPermissionRetryError: null,
+      });
+      if (loadNotice) notify.dismiss(loadNotice);
+      if (saveNotice) notify.dismiss(saveNotice);
+      loadNotice = saveNotice = null;
+      applyAppearance(merged.appearance);
+      applyDataCapacity(merged);
+      applyPipelineConfig(merged);
+      useAppStore.getState().setLang(merged.general.language);
+      void runRecordingApply(merged);
+      if (migrated.changed) scheduleSave();
+    } catch (error) {
+      if (sequence !== loadSequence) return;
+      const message = formatError(error);
       set({
         loaded: true,
+        loadError: message,
         keychainPermissionPromptOpen: false,
         keychainPermissionRetrying: false,
         keychainPermissionRetryError: null,
       });
-      applyAppearance(DEFAULT_SETTINGS.appearance);
-      applyDataCapacity(DEFAULT_SETTINGS);
-      applyPipelineConfig(DEFAULT_SETTINGS);
+      // Keep the last known in-memory settings; do not push default backend settings.
+      const lang = get().settings.general.language;
+      loadNotice = notify.error(translate('settingsLoadFailed', lang), message, {
+        source: 'settings-load',
+        actions: [{ label: translate('settingsRetry', lang), run: () => { void get().load(); } }],
+      });
     }
   },
 
+  save: () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = null;
+    if (!get().loaded || get().loadError !== null) return Promise.resolve(false);
+    const revision = changeRevision;
+    if (pendingSave?.revision === revision) return pendingSave.promise;
+    const sequence = loadSequence;
+    const snapshot = structuredClone(sanitizeForPersist(get().settings));
+    set({ saving: true });
+    const id = ++nextSaveId;
+    let write: Promise<void>;
+    try { write = getStore().set(STORE_KEY, snapshot); }
+    catch (error) { write = Promise.reject(error instanceof Error ? error : new Error(formatError(error))); }
+    const promise = (async () => {
+      if (sequence !== loadSequence) return false;
+      try {
+        await write;
+        if (sequence !== loadSequence) return false;
+        set({ saveError: null });
+        if (saveNotice) notify.dismiss(saveNotice);
+        saveNotice = null;
+        return true;
+      } catch (error) {
+        if (sequence !== loadSequence) return false;
+        const message = formatError(error);
+        set({ saveError: message });
+        const lang = get().settings.general.language;
+        saveNotice = notify.error(translate('settingsSaveFailed', lang), message, {
+          source: 'settings-save',
+          actions: [{ label: translate('settingsRetry', lang), run: () => { void get().save(); } }],
+        });
+        return false;
+      } finally {
+        if (sequence === loadSequence && pendingSave?.id === id) {
+          pendingSave = null;
+          set({ saving: false });
+        }
+      }
+    })();
+    pendingSave = { id, revision, promise };
+    return promise;
+  },
+
   update: (category, field, value) => {
+    if (category === 'general' && field === 'language') {
+      useAppStore.getState().setLang(value as Lang);
+    }
     // 外观/主题应用 (CSS 变量 + 全量重绘) 为非紧急更新 — 延迟到 transition 渲染。
     // 调用点 SettingsModal 不在本次变更范围, 故在 store 动作内包装。
     const commit = () => {
@@ -353,20 +388,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
             [field]: value,
           },
         };
-        // 异步保存 (防抖 300ms)
-        if (saveTimer) clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
-          getStore()
-            .set(STORE_KEY, sanitizeForPersist(get().settings))
-            .catch((e: unknown) => console.warn('[settings] 保存失败:', e));
-        }, 300);
         // 立即应用 appearance 变更
         if (category === 'appearance') {
           applyAppearance(newSettings.appearance);
         }
-        // 立即应用 data 缓存容量变更
+        // 立即应用 data 缓存容量变更; 录制存储/清理设置防抖推送
         if (category === 'data') {
           applyDataCapacity(newSettings);
+          scheduleRecordingApply(newSettings);
         }
         // 立即推送 performance 管道配置变更
         if (category === 'performance') {
@@ -374,21 +403,22 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         }
         return { settings: newSettings };
       });
+      scheduleSave(category === 'general' && field === 'showOnboarding');
     };
     if (category === 'appearance') {
       transitionStore(commit);
     } else {
       commit();
     }
-    // AI 分类副作用: 密钥入钥匙串 (磁盘剥离), 切换服务商时水合对应密钥
+    // AI 分类副作用: 覆盖写入后端 SecretStore；密钥永不读回。
     if (category === 'ai' && field === 'apiKey') {
-      api.aiKeychainSet(get().settings.ai.adapter, String(value)).catch((e: unknown) =>
+      api.aiSecretSet(get().settings.ai.adapter, String(value)).catch((e: unknown) =>
         console.warn('[settings] 钥匙串写入失败:', e)
       );
     } else if (category === 'ai' && field === 'adapter') {
-      api.aiKeychainGet(String(value))
-        .then((key) =>
-          set((s) => ({ settings: { ...s.settings, ai: { ...s.settings.ai, apiKey: key ?? '' } } }))
+      api.aiSecretStatus(String(value))
+        .then(() =>
+          set((s) => ({ settings: { ...s.settings, ai: { ...s.settings.ai, apiKey: '' } } }))
         )
         .catch((e: unknown) => console.warn('[settings] 钥匙串读取失败:', e));
     }
@@ -404,16 +434,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     applyAppearance(DEFAULT_SETTINGS.appearance);
     applyDataCapacity(DEFAULT_SETTINGS);
     applyPipelineConfig(DEFAULT_SETTINGS);
+    scheduleRecordingApply(DEFAULT_SETTINGS);
     // 全量重置: 清掉当前适配器的钥匙串密钥
-    api.aiKeychainDelete(get().settings.ai.adapter).catch((e: unknown) =>
+    api.aiSecretDelete(get().settings.ai.adapter).catch((e: unknown) =>
       console.warn('[settings] 钥匙串删除失败:', e)
     );
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      getStore()
-        .set(STORE_KEY, sanitizeForPersist(DEFAULT_SETTINGS))
-        .catch((e: unknown) => console.warn('[settings] 保存失败:', e));
-    }, 300);
+    scheduleSave();
   },
 
   resetCategory: (category) => {
@@ -425,19 +451,17 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     }));
     const { settings } = get();
     if (category === 'appearance') applyAppearance(settings.appearance);
-    if (category === 'data') applyDataCapacity(settings);
+    if (category === 'data') {
+      applyDataCapacity(settings);
+      scheduleRecordingApply(settings);
+    }
     if (category === 'performance') applyPipelineConfig(settings);
     // AI 分类重置: 同步清掉当前适配器的钥匙串密钥
     if (category === 'ai') {
-      api.aiKeychainDelete(get().settings.ai.adapter).catch((e: unknown) =>
+      api.aiSecretDelete(get().settings.ai.adapter).catch((e: unknown) =>
         console.warn('[settings] 钥匙串删除失败:', e)
       );
     }
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      getStore()
-        .set(STORE_KEY, sanitizeForPersist(get().settings))
-        .catch((e: unknown) => console.warn('[settings] 保存失败:', e));
-    }, 300);
+    scheduleSave();
   },
 }));

@@ -23,8 +23,7 @@
 //! - `compile_tests` / `equiv_tests` / eval 测试集: 全流水线测试
 
 mod compile;
-mod prelude;
-mod traits;
+mod provenance;
 
 pub mod evaluate;
 
@@ -32,11 +31,11 @@ pub mod evaluate;
 
 pub use compile::CompiledGraph;
 pub use eval::{
-    node_out_entry, node_out_str_entry, set_port, set_str_port, CompiledEval, SourceFramesMap,
-    SourceTextsMap, StringValuesMap, ValuesMap,
+    CompiledEval, SourceFramesMap, SourceTextsMap, StringValuesMap, ValuesMap, node_out_entry,
+    node_out_str_entry, set_port, set_str_port,
 };
 pub use hir::{
-    port_domain_event, CompileError, CompileReport, EdgeClass, HirEdge, HirNode, TypedGraph,
+    CompileError, CompileReport, EdgeClass, HirEdge, HirNode, TypedGraph, port_domain_event,
 };
 pub use lower::CompiledOp;
 pub use plane::{BytePlan, ByteRoute};
@@ -50,14 +49,4 @@ mod compile_tests;
 #[cfg(test)]
 mod equiv_tests;
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    mod eval_custom_tests;
-    mod eval_filter_tests;
-    mod eval_input_tests;
-    mod eval_math_tests;
-    mod eval_misc_tests;
-    mod eval_str_tests;
-    mod eval_trigger_tests;
-}
+mod tests;

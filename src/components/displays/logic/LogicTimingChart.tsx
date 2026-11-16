@@ -1,9 +1,11 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAppStore } from '../../../store/appStore';
 import { logicSampleBuffer } from '../../../lib/buffers/logicBuffer';
 import { clearLogicBuffer } from '../../../lib/buffers/logicSubscription';
-import { t } from '../../../i18n';
+import { translate } from '../../../i18n';
 import { ToolbarIconButton } from '../../ui/ToolbarIconButton';
+import { HorizontalScrollArea } from '../../ui/HorizontalScrollArea';
+import { usePanelFollowing, usePanelGoLive } from '../common/PanelLiveness';
 import { Trash2, ArrowDown, ZoomIn, ZoomOut } from 'lucide-react';
 import type { LogicSample } from '../../../types';
 
@@ -29,6 +31,19 @@ export function LogicTimingChart() {
       containerRef.current.scrollLeft = containerRef.current.scrollWidth;
     }
   }, [samples, autoScroll]);
+
+  // 显示时效: 跟随最新 = 自动滚动开启
+  const reportFollowing = usePanelFollowing();
+  useEffect(() => {
+    reportFollowing(autoScroll);
+  }, [reportFollowing, autoScroll]);
+
+  // 从暂停恢复 → 统一跳最新 (恢复自动滚动并定位到最右)
+  const handleGoLive = useCallback(() => {
+    setAutoScroll(true);
+    if (containerRef.current) containerRef.current.scrollLeft = containerRef.current.scrollWidth;
+  }, []);
+  usePanelGoLive(handleGoLive);
 
   const handleClear = () => {
     void clearLogicBuffer();
@@ -102,15 +117,18 @@ export function LogicTimingChart() {
   return (
     <div className="h-full flex flex-col overflow-hidden bg-bg-editor">
       {/* 工具栏 */}
-      <div className="flex flex-wrap gap-2 p-2 items-center border-b border-border bg-bg-panel-header flex-shrink-0">
-        <div className="flex items-center gap-1.5 text-xs text-text-secondary font-mono">
+      <HorizontalScrollArea
+        shellClassName="flex-shrink-0"
+        className="flex flex-nowrap gap-2 p-2 items-center border-b border-border bg-bg-panel-header"
+      >
+        <div className="flex flex-shrink-0 items-center gap-1.5 text-xs text-text-secondary font-mono">
           <span className="px-1.5 py-0.5 rounded bg-bg-input">{samples.length} samples</span>
           <span className="px-1.5 py-0.5 rounded bg-bg-input">{visibleChannels} ch</span>
         </div>
 
         <div className="flex-1 min-w-2" />
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-shrink-0 items-center gap-2">
           <ToolbarIconButton
             icon={<ZoomOut />}
             title="Zoom out"
@@ -124,7 +142,7 @@ export function LogicTimingChart() {
             step={0.5}
             value={zoom}
             onChange={(e) => setZoom(parseFloat(e.target.value))}
-            className="w-20 sm:w-28 slider-input"
+            className="w-20 sm:w-28 flex-shrink-0 slider-input"
           />
           <ToolbarIconButton
             icon={<ZoomIn />}
@@ -135,18 +153,20 @@ export function LogicTimingChart() {
         </div>
 
         <ToolbarIconButton
+          className="flex-shrink-0"
           icon={<ArrowDown />}
           active={autoScroll}
-          title={t(lang, 'autoScroll')}
+          title={translate('autoScroll', lang)}
           onClick={() => setAutoScroll(!autoScroll)}
         />
         <ToolbarIconButton
+          className="flex-shrink-0"
           icon={<Trash2 />}
           variant="danger"
-          title={t(lang, 'clear')}
+          title={translate('clear', lang)}
           onClick={handleClear}
         />
-      </div>
+      </HorizontalScrollArea>
 
       {/* 时序图 */}
       <div
@@ -155,7 +175,7 @@ export function LogicTimingChart() {
       >
         {samples.length === 0 ? (
           <div className="flex items-center justify-center h-full text-text-secondary text-xs">
-            {t(lang, 'noLogicSamples')}
+            {translate('noLogicSamples', lang)}
           </div>
         ) : (
           <svg
@@ -220,7 +240,7 @@ export function LogicTimingChart() {
                 y={ch * rowHeight + rowHeight / 2 + 4}
                 fill={channelColors[ch % channelColors.length]}
                 fontSize={11}
-                fontFamily="monospace"
+                style={{ fontFamily: 'var(--font-mono)' }}
                 fontWeight={600}
               >
                 CH{ch}

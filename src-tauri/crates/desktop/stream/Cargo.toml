@@ -1,9 +1,13 @@
 [package]
-name = "stream"
-description = "Lissio 统一分片流框架 (StreamSource) + 自适应推送速率控制器 (AdaptiveRate + adaptive_channel_loop)"
+name = "lissio-stream"
+description = "Lissio 统一分片流框架 (StreamSource) + 自适应推送速率控制器 (AdaptiveRate + adaptive_stream_loop)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "stream"
 
 [lints]
 workspace = true
@@ -18,15 +22,12 @@ raw-data = { workspace = true }
 pipeline = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
-tauri = { workspace = true }
 log = { workspace = true }
 parking_lot = { workspace = true }
 error = { workspace = true }
-
-[dev-dependencies]
 serde_json = { workspace = true }
 
 [package.metadata.lissio]
 domain = "desktop"
-layer = 5
-responsibility = "Lissio 统一分片流框架 (StreamSource) + 自适应推送速率控制器 (AdaptiveRate + adaptive_channel_loop)"
+layer = 2
+responsibility = "Lissio 统一分片流框架 (StreamSource) + 自适应推送速率控制器 (AdaptiveRate + adaptive_stream_loop)"

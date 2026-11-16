@@ -15,8 +15,8 @@ export interface CanFrame {
   rtr: boolean;
   /// 数据长度 (0-8)
   dlc: number;
-  /// 数据字节
-  data: number[];
+  /// 数据字节 (只读 wire 视图)
+  readonly data: readonly number[];
   /// 收/发方向
   direction: CanDirection;
 }
@@ -25,7 +25,20 @@ export interface CanFrame {
 export interface CanFrameBatch {
   /// 组级单调序号 — 分片并发推送时前端按 seq 重组
   seq: number;
-  frames: CanFrame[];
+  readonly frames: readonly CanFrame[];
+}
+
+/// CAN 显示订阅过滤条件 — 与 Rust `CanFrameFilter` 的 serde 契约逐字一致。
+/// 所有字段可省略；出现的字段按逻辑 AND 匹配。
+export interface CanFrameFilter {
+  id?: number;
+  id_mask?: number;
+  id_min?: number;
+  id_max?: number;
+  extended?: boolean;
+  rtr?: boolean;
+  direction?: CanDirection;
+  data_pattern?: readonly number[];
 }
 
 /// candleLight USB 设备信息 — 与 Rust CandleDeviceInfo 对应
@@ -39,8 +52,9 @@ export interface CandleDeviceInfo {
   serial_number: string | null;
 }
 
-/// CAN 波特率预设
-export type CanBitrate = 'Bps100k' | 'Bps125k' | 'Bps250k' | 'Bps500k' | 'Bps1m';
+// CAN 波特率 — wire 类型由 Rust 生成 (data_model::CanBitrate), 拼写逐字一致
+// (后端 1M 变体为小写 m); 候选清单以 `CAN_BITRATES` 为准
+export type { CanBitrate } from './generated/CanBitrate';
 
 /// 单个 ID 的 CAN 负载统计 — 与 Rust CanIdLoadStats 对应
 export interface CanIdLoadStats {
@@ -88,17 +102,6 @@ export interface CanIdLoadHistory {
   history: CanLoadHistoryPoint[];
 }
 
-/// slcan 传输配置
-export interface SlcanConfig {
-  port_name: string;
-  baud_rate: number;
-  can_bitrate: CanBitrate;
-}
-
-/// candleLight 传输配置
-export interface CandleConfig {
-  bus: number;
-  address: number;
-  can_bitrate: CanBitrate;
-  channel: number;
-}
+// slcan / candleLight 传输配置 — wire 类型由 Rust 生成
+export type { SlcanConfig } from './generated/SlcanConfig';
+export type { CandleConfig } from './generated/CandleConfig';

@@ -17,9 +17,9 @@ const COLORS = [
 /// full 模式: Canvas 铺满主区 + 图例侧栏 (固定 200px)
 /// 紧凑模式: 固定 120x120 Canvas + 下方图例 (节点编辑器内)
 export const PieChart = memo(function PieChart({ widget, full = false }: PieChartProps) {
-  const { segments, channels } = widget.params;
+  const { segments } = widget.params;
   const portNames = segments.map((_, index) => `seg${index}`);
-  const inputs = useNumericInputs(widget.params.id, portNames, channels);
+  const inputs = useNumericInputs(widget.params.id, portNames);
   const values = portNames.map((port) => inputs[port]?.latest?.value ?? 0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // full 模式下跟踪容器尺寸以触发重绘
@@ -149,7 +149,7 @@ export const PieChart = memo(function PieChart({ widget, full = false }: PieChar
         </div>
         {/* 侧栏: 图例列表 */}
         <div className="w-[200px] flex-shrink-0 border-l border-border bg-bg-sidebar overflow-y-auto flex flex-col gap-2 p-2.5">
-          <div className="text-[10px] text-text-secondary uppercase tracking-wide font-semibold px-1">Legend</div>
+          <div className="section-heading section-heading--micro px-1">Legend</div>
           {legend}
         </div>
       </div>

@@ -5,6 +5,7 @@ mod codec;
 mod config;
 pub(crate) mod descriptor;
 mod factory;
+mod node_driver;
 mod planner;
 pub(crate) mod read;
 #[cfg(test)]
@@ -12,13 +13,14 @@ mod rtu_tests;
 mod write;
 
 pub use client::ModbusSession;
-pub use codec::{decode_registers, encode_registers, CodecError};
+pub use codec::{CodecError, decode_registers, encode_registers};
 pub use config::{
     ByteOrder, ModbusArea, ModbusConfig, ModbusDataType, ModbusPoint, ModbusRtuConfig,
     ReconnectConfig, SerialDataBits, SerialFlowControl, SerialParity, SerialStopBits, WordOrder,
 };
 pub use factory::{ModbusFactory, ModbusRtuFactory};
-pub use planner::{plan_reads, PlanError, PlannedPoint, ReadPlan};
+pub use node_driver::{ModbusRtuDriver, ModbusTcpDriver};
+pub use planner::{PlanError, PlannedPoint, ReadPlan, plan_reads};
 
 /// Stable driver identifier used in persisted driver payloads.
 pub const DRIVER_ID: &str = "modbus-tcp";

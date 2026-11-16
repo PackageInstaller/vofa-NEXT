@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { useUpdateStore } from '../../store/updateStore';
-import { t } from '../../i18n';
+import { translate } from '../../i18n';
 import { activateOnKeyboard } from '../../lib/utils/a11y';
 
 /// "已是最新" 提示的显示时长 (ms)
@@ -38,8 +38,8 @@ export function UpdateIndicator() {
 
   if (status === 'checking') {
     return (
-      <div className="flex items-center gap-1.5 px-1.5" title={t(lang, 'updateChecking')}>
-        <RefreshCw size={12} className="animate-spin text-text-secondary" />
+      <div className="flex items-center gap-1.5 px-1.5" title={translate('updateChecking', lang)}>
+        <RefreshCw size={12} className="motion-spin text-text-secondary" />
       </div>
     );
   }
@@ -48,13 +48,13 @@ export function UpdateIndicator() {
     return (
       <div
         className="flex items-center gap-1.5 px-1.5 cursor-pointer hover:bg-bg-hover rounded"
-        title={t(lang, 'updateAvailableTitle')}
+        title={translate('updateAvailableTitle', lang)}
         onClick={openDialog}
         onKeyDown={activateOnKeyboard}
         role="button"
         tabIndex={0}
       >
-        <span className="w-2 h-2 rounded-full bg-accent animate-pulse inline-block" />
+        <span className="w-2 h-2 rounded-full bg-accent motion-pulse inline-block" />
         <span className="text-accent font-mono text-[10px]">v{updateInfo.version}</span>
       </div>
     );
@@ -64,7 +64,7 @@ export function UpdateIndicator() {
     return (
       <div
         className="flex items-center gap-1.5 px-1.5 cursor-pointer hover:bg-bg-hover rounded tabular-nums"
-        title={t(lang, 'updateDownloading')}
+        title={translate('updateDownloading', lang)}
         onClick={openDialog}
         onKeyDown={activateOnKeyboard}
         role="button"
@@ -79,14 +79,14 @@ export function UpdateIndicator() {
     return (
       <div
         className="flex items-center gap-1.5 px-1.5 cursor-pointer hover:bg-bg-hover rounded"
-        title={t(lang, 'updateReadyHint')}
+        title={translate('updateReadyHint', lang)}
         onClick={() => void relaunch()}
         onKeyDown={activateOnKeyboard}
         role="button"
         tabIndex={0}
       >
         <span className="w-2 h-2 rounded-full bg-green inline-block" />
-        <span className="text-green text-[10px]">{t(lang, 'updateRestart')}</span>
+        <span className="text-green text-[10px]">{translate('updateRestart', lang)}</span>
       </div>
     );
   }
@@ -94,7 +94,7 @@ export function UpdateIndicator() {
   if (status === 'up-to-date' && showUpToDate) {
     return (
       <div className="flex items-center gap-1.5 px-1.5">
-        <span className="text-text-muted text-[10px]">{t(lang, 'updateUpToDate')}</span>
+        <span className="text-text-muted text-[10px]">{translate('updateUpToDate', lang)}</span>
       </div>
     );
   }
@@ -102,7 +102,7 @@ export function UpdateIndicator() {
   // auto 失败静默 — 仅手动检查失败显示警告图标
   if (status === 'error' && lastTrigger === 'manual') {
     return (
-      <div className="flex items-center gap-1.5 px-1.5" title={error ?? t(lang, 'updateError')}>
+      <div className="flex items-center gap-1.5 px-1.5" title={error ?? translate('updateError', lang)}>
         <AlertTriangle size={12} className="text-yellow" />
       </div>
     );

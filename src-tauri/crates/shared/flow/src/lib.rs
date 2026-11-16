@@ -48,7 +48,7 @@ impl fmt::Display for InvalidSourceId {
 impl std::error::Error for InvalidSourceId {}
 
 /// Direction relative to Lissio.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum Direction {
     Receive,
@@ -56,7 +56,7 @@ pub enum Direction {
 }
 
 /// Unit in which a loss can be stated honestly.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum LostUnit {
     Bytes,
@@ -66,7 +66,7 @@ pub enum LostUnit {
 }
 
 /// Discontinuity immediately before an envelope.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct FlowGap {
     pub first_missing_sequence: u64,
@@ -85,7 +85,7 @@ impl FlowGap {
 }
 
 /// Common metadata carried by every typed flow lane.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct FlowEnvelope<T> {
     pub source_id: SourceId,
@@ -116,7 +116,7 @@ impl<T> FlowEnvelope<T> {
 }
 
 /// Transport framing. Only stream chunks may be coalesced.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum Framing {
     Stream,
@@ -125,7 +125,7 @@ pub enum Framing {
 }
 
 /// Position of this chunk in its framing unit.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum Boundary {
     Complete,
@@ -163,7 +163,7 @@ impl BytesChunk {
 }
 
 /// Cold-path payload declaration used by registries and graph validation.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum PayloadKind {
     Bytes,
@@ -172,36 +172,28 @@ pub enum PayloadKind {
     Numeric,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// 手动 TS 实现: wire 为纯字符串 (serde transparent), derive 会因无法解析
+// transparent 属性产生误报警告, 这里直接给出与 wire 一致的 string 投影。
+impl ts_rs::TS for SourceId {
+    type WithoutGenerics = Self;
+    type OptionInnerType = Self;
 
-    #[test]
-    fn envelope_serialization_is_stable_and_tag_free() {
-        let envelope = FlowEnvelope {
-            source_id: SourceId::new("tcp:one").unwrap(),
-            connection_epoch: 3,
-            first_sequence: 7,
-            last_sequence: 7,
-            observed_time_unix_ns: 42,
-            direction: Direction::Receive,
-            gap_before: None,
-            payload: BytesChunk::complete(Bytes::from_static(&[1, 2]), Framing::Stream),
-        };
-        let value = serde_json::to_value(envelope).unwrap();
-        assert_eq!(value["sourceId"], "tcp:one");
-        assert_eq!(value["payload"]["bytes"], serde_json::json!([1, 2]));
-        assert!(value.get("payloadKind").is_none());
+    fn name(_: &ts_rs::Config) -> String {
+        "SourceId".to_owned()
     }
 
-    #[test]
-    fn gap_does_not_invent_lost_units() {
-        let gap = FlowGap {
-            first_missing_sequence: 8,
-            last_missing_sequence: 10,
-            lost_units: None,
-            unit: LostUnit::Unknown,
-        };
-        assert_eq!(gap.missing_sequences(), 3);
+    fn inline(_: &ts_rs::Config) -> String {
+        "string".to_owned()
+    }
+
+    fn decl(cfg: &ts_rs::Config) -> String {
+        format!("type {} = {};", Self::name(cfg), Self::inline(cfg))
+    }
+
+    fn output_path() -> Option<std::path::PathBuf> {
+        Some("SourceId.ts".into())
     }
 }
+
+#[cfg(test)]
+mod tests;

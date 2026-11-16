@@ -3,7 +3,7 @@ import { Plus } from 'lucide-react';
 import type { WidgetConfig } from '../../../types';
 import { isUnaryMathOp } from '../../../types';
 import { useNumericInputs, useNumericOutput } from '../../../lib/hooks/useNumericPort';
-import { NumericPortStatus } from '../../displays/common/NumericPortStatus';
+import { NumericPortStatus } from '../shared/NumericPortStatus';
 
 interface MathWidgetProps {
   widget: Extract<WidgetConfig, { kind: 'Math' }>;
@@ -49,7 +49,7 @@ export const MathWidget = memo(function MathWidget({ widget }: MathWidgetProps) 
         {unit && <span className="text-xs text-text-secondary">{unit}</span>}
       </div>
       {!isConnected && (
-        <div className="flex items-center gap-1 justify-center p-1 text-[10px] text-text-secondary opacity-70">
+        <div className="flex items-center gap-1 justify-center p-1 text-[10px] text-text-secondary opacity-secondary">
           <Plus size={10} />
           <span>连接输入</span>
         </div>

@@ -1,6 +1,6 @@
 import { nodeDocument, canvasNode } from '../lib/nodes/document';
+import { deviceTreeCanvasNodes, walkDeviceTree } from '../lib/acquisition/deviceTreeModel';
 import { type Node, type Edge } from '@xyflow/react';
-import { nanoid } from 'nanoid';
 import type { AcquisitionNodeData } from '../lib/acquisition/acquisitionNodes';
 import { loadAdapterCapabilities } from '../lib/acquisition/capabilityCatalog';
 import { buildDeviceCards } from '../lib/acquisition/deviceCardModel';
@@ -18,12 +18,8 @@ import type {
 import { notify } from '../lib/tauri/notifications';
 import { nodeError } from '../lib/tauri/errorGuidance';
 import { parseNodeError } from '../types/errors';
-import { t } from '../i18n';
-import {
-  getEffectiveChannels,
-  schemaFromProtocolConfig,
-} from '../lib/utils/protocolSchema';
-import { widgetInputValue } from '../lib/utils/widgetDefaults';
+import { translate } from '../i18n';
+import { widgetInputValue } from '../lib/utils/widgetValue';
 import type {
   DataTab,
   WidgetConfig,
@@ -51,27 +47,6 @@ export interface ProtocolNodeData extends CanvasNodeData {
 }
 
 export const DEFAULT_PROTOCOL_CONFIG: ProtocolConfig = { kind: 'JustFloat', channels: null };
-
-/// 在指定页签创建协议节点
-export function createProtocolNode(
-  config: ProtocolConfig = DEFAULT_PROTOCOL_CONFIG,
-  position?: { x: number; y: number },
-  tabId = useAppStore.getState().activeControlTabId,
-): Node {
-  return {
-    id: `protocol-${nanoid(8)}`,
-    type: 'protocol',
-    position: position ?? { x: 300, y: 60 },
-    data: {
-      tabId,
-      config,
-      convertTo: null,
-      channels: getEffectiveChannels(config, null),
-      schema: schemaFromProtocolConfig(config),
-      label: config.kind,
-    } satisfies ProtocolNodeData,
-  };
-}
 
 /// 节点是否为设备、协议或点位选择等结构节点
 export function isStructuralNode(n: Node): boolean {
@@ -129,7 +104,7 @@ async function doSyncTabGraphOnce(
 ): Promise<string | undefined> {
   const state = useAppStore.getState();
   const tabNodes = state.rfNodes.filter(n => n.data.tabId === tabId);
-  const ids = new Set(tabNodes.map(n => n.id));
+  const ids = new Set([...tabNodes, ...deviceTreeCanvasNodes(tabNodes)].map(n => n.id));
   const documents = tabNodes.map(nodeDocument);
   const edges = state.rfEdges.filter(e => ids.has(e.source) && ids.has(e.target)).map(edgeToGraphEdge);
 
@@ -151,7 +126,7 @@ async function doSyncTabGraphOnce(
     const lang = useAppStore.getState().lang;
     const message = nodeError(lang, err);
     notify.error(
-      t(lang, 'notifNodeGraphSyncFailed'),
+      translate('notifNodeGraphSyncFailed', lang),
       message,
       { source: 'syncTabGraph' }
     );
@@ -229,12 +204,13 @@ function jsonDeepEqual(a: unknown, b: unknown): boolean {
 export function adoptSourceGraph(event: GraphSourceEventPayload): void {
   const state = useAppStore.getState();
   state.setGraphVersion(event.version);
-  const oldIds = new Set(state.rfNodes.filter(n => n.data.tabId === event.tab_id).map(n => n.id));
+  const oldIds = new Set(state.rfNodes.filter(n => n.data.tabId === event.tab_id).flatMap(n => n.type === 'acquisition'
+    ? walkDeviceTree((n.data as AcquisitionNodeData).node).map(child => child.id) : [n.id]));
   const adoptedNodes = event.documents.map(doc => {
     const previous = state.rfNodes.find(n => n.id === doc.id);
     return previous && jsonDeepEqual(nodeDocument(previous), doc) ? previous : canvasNode(doc, previous);
   });
-  const rfNodes = [...state.rfNodes.filter(n => !oldIds.has(n.id)), ...adoptedNodes];
+  const rfNodes = [...state.rfNodes.filter(n => !(n.data.tabId === event.tab_id)), ...adoptedNodes];
   const adoptedEdges: Edge[] = event.edges.map(e => ({ id: e.id, source: e.source, sourceHandle: e.source_handle, target: e.target, targetHandle: e.target_handle }));
   const rfEdges = [...state.rfEdges.filter(e => !oldIds.has(e.source) && !oldIds.has(e.target)), ...adoptedEdges];
   if (jsonDeepEqual(state.rfNodes, rfNodes) && jsonDeepEqual(state.rfEdges, rfEdges)) return;
@@ -338,11 +314,14 @@ export async function hydrateWorkspaceFromBackend(): Promise<boolean> {
   if (!snap) return false;
 
   const rfNodes = snap.graphs.flatMap(g => g.documents.map(doc => canvasNode(doc)));
-  const cards = await loadAdapterCapabilities().then(buildDeviceCards).catch(() => []);
+  const cards = await loadAdapterCapabilities().then(buildDeviceCards).catch((error: unknown) => {
+    console.error('[workspace] 设备能力目录加载失败, 设备节点端口将不可用:', error);
+    return [];
+  });
   for (const node of rfNodes) {
     if (node.type !== 'acquisition') continue;
     const data = node.data as AcquisitionNodeData;
-    const card = cards.find(c => c.adapter.adapterId === data.spec.driver.driverId && c.endpoint.id === data.spec.capabilityEndpointId);
+    const card = cards.find(c => c.adapter.adapterId === data.node.driver && c.endpoint.id === data.node.capabilityEndpointId);
     if (card) {
       data.card = card;
       data.ports = card.endpoint.ports.map(p => ({ id: p.id, direction: p.direction, domain: p.dataDomain }));

@@ -27,6 +27,8 @@ pub struct ToolRunDto {
     pub name: String,
     /// JSON 参数 (LLM 生成)。
     pub arguments: Value,
+    /// 工具调用时，当前回复正文的 UTF-16 长度；用于按事件顺序穿插显示。
+    pub text_offset: usize,
     /// 执行输出文本。
     #[serde(default)]
     pub content: String,
@@ -38,6 +40,24 @@ pub struct ToolRunDto {
     pub done: bool,
 }
 
+/// 助手回合中的展示顺序；相邻同类文字事件由记录器合并。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TurnEventDto {
+    Text { text: String },
+    Reasoning { text: String },
+    Tool { id: String },
+}
+
+/// 用户附件 (文本文件) — 与前端 `AiAttachment` 对齐。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AttachmentDto {
+    /// 文件名 (含扩展名, 仅展示与上下文标注)。
+    pub name: String,
+    /// 文本内容。
+    pub content: String,
+}
+
 /// 对话视图条目 — 与前端 `AiViewItem` 对齐。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ViewItemDto {
@@ -46,9 +66,21 @@ pub struct ViewItemDto {
     /// 文本内容。
     #[serde(default)]
     pub text: String,
+    /// 用户条目携带的附件 (派生 LLM 历史时并入 user 消息文本)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Vec<AttachmentDto>>,
     /// 助手条目携带的工具调用记录。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ToolRunDto>>,
+    /// 正文、思考和工具调用的原始事件顺序。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeline: Option<Vec<TurnEventDto>>,
+    /// 本回合模型提供的推理文本，仅用于界面展示。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
+    /// 本回合从开始执行到收束的用时（毫秒），用于活动记录标题。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
     /// 错误条目标记 (仅 UI 展示, 不入 LLM 历史)。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<bool>,

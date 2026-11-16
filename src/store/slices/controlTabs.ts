@@ -1,3 +1,7 @@
+import { translate } from '../../i18n';
+import { loadAdapterCapabilities } from '../../lib/acquisition/capabilityCatalog';
+import { createNodeFromCatalog } from '../../lib/models/createFromCatalog';
+import { notify, formatError } from '../../lib/tauri/notifications';
 import { api } from '../../lib/tauri/tauri';
 import { nanoid } from 'nanoid';
 import { withHistoryOp, type HistoryTarget } from '../historyStore';
@@ -10,6 +14,7 @@ export interface ControlTabSlice {
   controlTabs: { id: string; name: string }[];
   activeControlTabId: string;
   addControlTab: (name?: string) => void;
+  addDefaultCanvas: () => Promise<void>;
   removeControlTab: (tabId: string) => void;
   setActiveControlTab: (tabId: string) => void;
   renameControlTab: (tabId: string, name: string) => void;
@@ -32,6 +37,26 @@ export const createControlTabSlice: AppSlice<ControlTabSlice> = (set, get) => {
         });
         void get().syncTabGraph(id);
       }),
+
+    addDefaultCanvas: async () => {
+      try {
+        const adapters = await loadAdapterCapabilities();
+        if (!adapters.some(adapter => adapter.adapterId === 'serial' && adapter.endpoints.length > 0)) {
+          notify.error(translate('defaultCanvasUnavailable', get().lang), translate('defaultCanvasUnavailable', get().lang), { source: 'addDefaultCanvas' });
+          return;
+        }
+        get().addControlTab(translate('defaultCanvas', get().lang));
+        const tabId = get().activeControlTabId;
+        const raw = await createNodeFromCatalog({
+          modelId: 'widget:RawData',
+          position: { x: 560, y: 120 },
+          tabId,
+        });
+        await get().seedInitialGraph(raw.id, 'user');
+      } catch (error) {
+        notify.error(translate('defaultCanvasUnavailable', get().lang), formatError(error));
+      }
+    },
 
     removeControlTab: (tabId) =>
       withHistoryOp(

@@ -8,7 +8,7 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 
 export default tseslint.config(
-  // 1. 全局忽略
+  // 1. Global ignores
   {
     ignores: [
       'dist/**',
@@ -16,24 +16,29 @@ export default tseslint.config(
       'src-tauri/**',
       'public/**',
       'coverage/**',
+      // Checkout-local diagnostics and TMP caches are generated, gitignored artifacts.
+      'output/**',
       'docs/**',
       '**/*.d.ts',
+      'src/types/generated/**',
       'promo*.html',
       'index.html',
       'eslint.config.js',
+      // Local untracked tool directory (same name in gitignore) — not a repository deliverable
+      '.workbuddy/**',
     ],
   },
 
-  // 2. JS 基础推荐规则
+  // 2. Base JS recommended rules
   js.configs.recommended,
 
-  // 3. TypeScript 严格档:type-checked(类型相关 bug)+ stylistic(风格一致)
+  // 3. TypeScript strict tier: type-checked (type-related bugs) + stylistic (consistent style)
   ...[
     ...tseslint.configs.recommendedTypeChecked,
     ...tseslint.configs.stylisticTypeChecked,
   ].map(config => ({ ...config, files: ['**/*.{ts,tsx}'] })),
 
-  // 4. 给所有 TS/TSX 开 projectService,自动按文件选正确的 tsconfig
+  // 4. Enable projectService for every TS/TSX file so each picks the right tsconfig
   //    (src/* → tsconfig.json, vite.config.ts → tsconfig.node.json)
   {
     files: ['**/*.{ts,tsx}'],
@@ -45,7 +50,7 @@ export default tseslint.config(
     },
   },
 
-  // 5. 源码:浏览器 + React 生态
+  // 5. Source: browser + React ecosystem
   {
     files: ['src/**/*.{ts,tsx}'],
     plugins: {
@@ -64,7 +69,7 @@ export default tseslint.config(
       react: { version: '19.0' },
     },
     rules: {
-      // React 生态
+      // React ecosystem
       ...react.configs.recommended.rules,
       ...react.configs['jsx-runtime'].rules,
       ...reactHooks.configs.recommended.rules,
@@ -73,8 +78,9 @@ export default tseslint.config(
         'error',
         {
           allowConstantExport: true,
-          // 这些导出是同模块组件所需的纯工具、类型上下文或 R3F 配置；
-          // 明确列出以保持 Fast Refresh 的其余约束有效。
+          // These exports are pure utilities, type contexts, or R3F config needed by
+          // same-module components; listing them explicitly keeps the remaining Fast
+          // Refresh constraints in force.
           allowExportNames: [
             'BITRATE_PRESETS', 'BLOCK_TYPE_CONFIG', 'CHECKSUM_COVER_OPTIONS',
             'CHECKSUM_OPTIONS', 'CHECKSUM_POSITION_OPTIONS', 'CanvasErrorTooltip',
@@ -82,17 +88,21 @@ export default tseslint.config(
             'FRAME_EXAMPLES', 'GROUP_SIZE', 'HISTORY_KEY', 'HISTORY_MAX', 'HeaderBytes',
             'IdLoadDistribution', 'MeasureItem', 'NumericPortStatus', 'PillRect', 'ROW_HEIGHT',
             'SlidingPill', 'THRESHOLD_PRESETS', 'WINDOW_PRESETS', 'WidgetCard',
-            'WidgetEmbeddedContext', 'blockSummary', 'byteToAscii', 'byteToHex',
-            'compileErrorMessage', 'directionColorClass', 'directionSymbol', 'evalCustomWidgetDef',
+            'WidgetEmbeddedContext', 'blockSummary', 'buildLissajousParticles',
+            'buildLissajousPath', 'byteToAscii', 'byteToHex',
+            'compileErrorMessage', 'directionColorClass', 'directionSymbol',
+            'escapeControlChar', 'evalCustomWidgetDef',
             'formatBitrate', 'formatFps', 'formatFreq', 'formatNumericValue', 'formatPercent',
             'formatTime', 'getCompileStatus', 'getOutputPortNames', 'hexColorClass',
-            'isPrintable', 'isWindowsPlatform', 'loadColor', 'loadHistory',
-            'numericValueOr', 'saveHistory', 'useCanvasNodeError', 'useSlidingPill',
+            'isInvisibleChar', 'isPrintable', 'isWindowsPlatform', 'loadColor', 'loadHistory',
+            'numericValueOr', 'parseDraftNumber', 'saveHistory', 'segmentEscapedText',
+            'useCanvasNodeError', 'usePanelFollowing', 'usePanelFrozen', 'usePanelGoLive',
+            'usePanelKey', 'useSlidingPill',
           ],
         },
       ],
 
-      // 严格 TS 风格
+      // Strict TS style
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': [
         'error',
@@ -108,7 +118,7 @@ export default tseslint.config(
         },
       ],
 
-      // JS 通用安全
+      // General JS safety
       eqeqeq: ['error', 'always', { null: 'ignore' }],
       'no-console': ['warn', { allow: ['warn', 'error', 'info'] }],
       'prefer-const': 'error',
@@ -116,7 +126,7 @@ export default tseslint.config(
     },
   },
 
-  // 6. 测试:放宽 any / 非空断言 / console
+  // 6. Tests: relax any / non-null assertions / console
   {
     files: [
       'src/**/*.{test,spec}.{ts,tsx}',
@@ -135,7 +145,7 @@ export default tseslint.config(
     },
   },
 
-  // 7. 根目录配置文件:vite/vitest 等走 Node 环境
+  // 7. Root config files: vite/vitest etc. run in the Node environment
   {
     files: ['*.config.{js,ts,mjs,cjs}', 'scripts/**/*.{js,mjs,cjs}'],
     languageOptions: {
@@ -149,7 +159,7 @@ export default tseslint.config(
     },
   },
 
-  // 8. 严格规则：所有诊断均阻断 lint。
+  // 8. Strict rules: every diagnostic blocks lint.
   {
     files: ['**/*.{ts,tsx}'],
     rules: {
@@ -192,7 +202,7 @@ export default tseslint.config(
       'jsx-a11y/no-static-element-interactions': 'error',
       'no-console': 'error',
       'react-hooks/exhaustive-deps': 'error',
-      // React Three Fiber 使用 JSX 属性映射 Three.js 对象；这些并非 DOM 属性。
+      // React Three Fiber maps Three.js objects through JSX props; these are not DOM attributes.
       'react/no-unknown-property': [
         'error',
         {
@@ -206,6 +216,27 @@ export default tseslint.config(
             'rotation',
             'transparent',
           ],
+        },
+      ],
+    },
+  },
+  // 9. Loading/lazy-loading discipline — above-the-fold modules must come from the entry
+  //    or the manifest; lazy loading may only be declared under `src/components/lazy/` (the
+  //    repo's only React.lazy manifest) and the panel view table (dock dispatch).
+  //    See the header of `src/components/lazy/lazyComponents.ts` and `docs/architecture/web-exit.md`.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: [
+      'src/components/lazy/**',
+      'src/components/panels/registry/panelViewComponents.tsx',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.name='lazy']",
+          message:
+            'React.lazy may only be declared in src/components/lazy/lazyComponents.ts (the repo-wide lazy-loading manifest).',
         },
       ],
     },

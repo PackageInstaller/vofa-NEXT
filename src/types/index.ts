@@ -11,3 +11,5 @@ export * from './waveform';
 export * from './frameDecoder';
 export * from './protocolSchema';
 export * from './widgets';
+export * from './performance';
+export * from './glass';

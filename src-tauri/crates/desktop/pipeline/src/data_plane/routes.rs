@@ -3,18 +3,33 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
+use events::EventSinkHandle;
 use kind::NodeKind;
 use parking_lot::Mutex;
 use schema_types::ProtocolConfig;
-use tauri::AppHandle;
 
 use super::read_task;
 use super::{
-    DataPlaneState, ProtocolNodeState, RouteGroups, BUFFER_WINDOW_TARGET_SECONDS,
-    DEFAULT_BUFFER_CHANNELS, MAX_RAW_POINTS,
+    BUFFER_WINDOW_TARGET_SECONDS, DEFAULT_BUFFER_CHANNELS, DataPlaneState, MAX_RAW_POINTS,
+    ProtocolNodeState, RouteGroups,
 };
 
 impl DataPlaneState {
+    /// 丢弃未完成的字节帧，启动时由同一设备树来源重新同步。
+    pub fn reset_protocol_parsers(&self) {
+        let nodes = self.global_nodes.lock();
+        for (id, state) in self.protocol_states.lock().iter() {
+            if let Some(NodeKind::Protocol {
+                config,
+                convert_to,
+                schema,
+            }) = nodes.get(id).map(|node| &node.kind)
+            {
+                *state.lock() = ProtocolNodeState::new(config, convert_to.as_ref(), schema);
+            }
+        }
+    }
+
     /// 同步 protocol_states 与运行时节点索引中的 Protocol 节点 (图重编译后调用):
     /// 新增/配置变更 → 重建引擎; 节点删除 → 移除状态并清理 source_frames/source_texts 对应项
     pub fn sync_protocol_states(&self) {
@@ -39,12 +54,8 @@ impl DataPlaneState {
                 match states.get(&n.id) {
                     Some(st) => {
                         let mut st = st.lock();
-                        if !st.matches(config, convert_to.as_ref(), schema.as_ref()) {
-                            *st = ProtocolNodeState::new(
-                                config,
-                                convert_to.as_ref(),
-                                schema.as_ref(),
-                            );
+                        if !st.matches(config, convert_to.as_ref(), schema) {
+                            *st = ProtocolNodeState::new(config, convert_to.as_ref(), schema);
                             rebuilt.push((n.id.clone(), config.clone()));
                         }
                     }
@@ -54,7 +65,7 @@ impl DataPlaneState {
                             Arc::new(Mutex::new(ProtocolNodeState::new(
                                 config,
                                 convert_to.as_ref(),
-                                schema.as_ref(),
+                                schema,
                             ))),
                         );
                         rebuilt.push((n.id.clone(), config.clone()));
@@ -83,6 +94,8 @@ impl DataPlaneState {
             .retain(|id, _| live.iter().any(|k| k == id));
         // 路由去重组与缓冲别名 (不变量 4): 同 (字节源, 协议配置等价) 只解析一次
         self.rebuild_route_groups();
+        // 图已重编译: 断链警告去重集复位, 拓扑变化后的新断链应再次可见
+        self.reset_feed_gap_warnings();
     }
 
     /// 依据 BytePlan + 协议节点配置等价性重建去重组与缓冲别名 (冷路径,
@@ -123,8 +136,8 @@ impl DataPlaneState {
                 });
                 let Some(key) = key else { continue };
                 match local.iter_mut().find(|(k, ..)| *k == key) {
-                    Some((_, _, members)) => members.push(target.clone()),
-                    None => local.push((key, target.clone(), vec![target.clone()])),
+                    Some((_, _, members)) => members.push(target),
+                    None => local.push((key, target.clone(), vec![target])),
                 }
             }
             for (_, repr, members) in &local {
@@ -139,10 +152,12 @@ impl DataPlaneState {
     }
 
     /// 挂载设备节点读任务 (open 成功后调用; 同 id 重复调用先 detach)
-    pub async fn attach(&self, app: AppHandle, node_id: &str) {
+    pub async fn attach(&self, sink: EventSinkHandle, node_id: &str) {
         self.ensure_eval_worker();
         self.detach(node_id);
-        let rx = self.transport.subscribe_flow(node_id);
+        let rx = data_model::device_tree::NodeId::new(node_id)
+            .ok()
+            .and_then(|node_id| self.transport.subscribe_flow(&node_id));
         let Some(rx) = rx else {
             log::warn!("读任务挂载失败: 设备会话未打开: {node_id}");
             return;
@@ -151,7 +166,7 @@ impl DataPlaneState {
         self.raw_collector_for(node_id);
         let plane = self.clone();
         let id = node_id.to_string();
-        let handle = tokio::spawn(read_task::read_task(app, plane, id.clone(), rx));
+        let handle = tokio::spawn(read_task::read_task(sink, plane, id.clone(), rx));
         self.read_tasks.lock().insert(id, handle);
     }
 
@@ -176,8 +191,9 @@ impl DataPlaneState {
         lost_messages: u64,
         sample_rate: f32,
     ) {
+        // 消息大小契约的唯一权威在 data_model::simulation — 与生成侧同源
         let lost_frames =
-            lost_messages.saturating_mul(transport::test_data::samples_per_message(sample_rate));
+            lost_messages.saturating_mul(data_model::simulation::samples_per_message(sample_rate));
         if lost_frames == 0 {
             return;
         }

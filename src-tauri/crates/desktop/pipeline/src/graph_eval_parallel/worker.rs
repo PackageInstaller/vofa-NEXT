@@ -8,7 +8,7 @@ use waveform::DerivedWriter;
 use crate::graph_eval::{EvalBreakdown, SlotBufs};
 use crate::graph_eval_parallel::simd;
 
-use super::plan::{ns_since, BatchCtx, BucketPlan, WorkerState};
+use super::plan::{BatchCtx, BucketPlan, WorkerState, ns_since};
 
 /// 单桶单块执行 — 图优先两相推进:
 ///
@@ -101,11 +101,11 @@ pub(super) fn run_bucket_chunk(
                 }
             }
             for &si in &gp.spectra {
-                if let Some(slot) = plan.spectra[si].2 {
-                    if copy.1[slot] {
-                        ws.staged_spectra
-                            .push((u32::try_from(si).unwrap_or(u32::MAX), copy.0[slot]));
-                    }
+                if let Some(slot) = plan.spectra[si].2
+                    && copy.1[slot]
+                {
+                    ws.staged_spectra
+                        .push((u32::try_from(si).unwrap_or(u32::MAX), copy.0[slot]));
                 }
             }
         }
@@ -138,11 +138,11 @@ pub(super) fn run_bucket_chunk(
                     }
                 }
                 for &si in &gp.spectra_simd {
-                    if let Some(slot) = plan.spectra[si].2 {
-                        if copy.1[slot] {
-                            ws.staged_spectra
-                                .push((u32::try_from(si).unwrap_or(u32::MAX), copy.0[slot]));
-                        }
+                    if let Some(slot) = plan.spectra[si].2
+                        && copy.1[slot]
+                    {
+                        ws.staged_spectra
+                            .push((u32::try_from(si).unwrap_or(u32::MAX), copy.0[slot]));
                     }
                 }
             }

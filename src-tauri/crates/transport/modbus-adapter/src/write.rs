@@ -1,7 +1,7 @@
 use crate::client::{
-    ensure_connected, mark_degraded, mark_online, normalize, OperationError, Runtime,
+    OperationError, Runtime, ensure_connected, mark_degraded, mark_online, normalize,
 };
-use crate::{encode_registers, ModbusArea, ModbusPoint};
+use crate::{ModbusArea, ModbusPoint, encode_registers};
 use acquisition::{AcquisitionError, AcquisitionResult};
 use points::{PointQuality, PointValue, WriteItemResult, WriteRequest, WriteResult};
 use std::sync::Arc;
@@ -12,7 +12,7 @@ pub async fn write_request(
     runtime: &Arc<Runtime>,
     request: WriteRequest,
 ) -> AcquisitionResult<WriteResult> {
-    if request.deadline_unix_ns <= crate::client::now_unix_ns() {
+    if request.deadline_unix_ns <= data_model::now_ns() {
         return Err(AcquisitionError::Timeout);
     }
     let mut results = Vec::with_capacity(request.items.len());

@@ -35,8 +35,8 @@ export interface DerivedPort {
  *
  * - device: 由后端能力目录派生输入/输出端口
  * - protocol: in (输入/字节) / out (输出/字节) + 数值口 ch0..chN (时域) 或
- *   RawData 预设的 str (字符串域) — 数值口读 derivedPorts, 兜底 protocolPortNames
- * - widget: getWidgetPorts 静态表; RawData 的动态 `src:` 输入口不在表中
+ *   RawData 预设的 str (字符串域) — 运行时读 derivedPorts, 静态读 describe
+ * - widget: describe_node_documents 端口表; RawData 的动态 `src:` 输入口随描述更新
  *   (连线时由后端/前端自动改写, 见 validateConnection 的 RawData 特判)
  */
 export function nodePortTable(
@@ -100,6 +100,12 @@ export function validateConnection(ctx: ConnectionContext, conn: ConnectionCandi
   const target = ctx.nodes.find((n) => n.id === conn.target);
   if (!target) {
     return { ok: false, message: `节点不存在: ${conn.target} (先 get_workspace 查询有效 id)` };
+  }
+  if (target.data.treeRootId) {
+    return { ok: false, message: '协议输入由设备树父节点提供，请在设备树中修改装配关系。' };
+  }
+  if (source.data.treeRootId && source.data.enabled === false) {
+    return { ok: false, message: '请先在设备树中启用此协议节点及其父节点。' };
   }
 
   // 所有节点都归属页签，连线不得越过页签边界。

@@ -1,12 +1,13 @@
 //! 关于对话框 — 从菜单栏 / Activity Bar 触发
 
 import { useEffect, useState } from 'react';
-import { X, Github, ExternalLink } from 'lucide-react';
-import { getName, getVersion } from '@tauri-apps/api/app';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { X, Code, ExternalLink } from 'lucide-react';
+import { platform } from '../lib/platform';
+import { FONT_ATTRIBUTIONS } from '../lib/fontAttributions';
 import { useAppStore } from '../store/appStore';
-import { t } from '../i18n';
+import { translate } from '../i18n';
 import { LissajousMark } from './brand/LissajousMark';
+import { DialogOverlay, DialogSurface } from './ui/Dialog';
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -14,9 +15,12 @@ interface AboutModalProps {
 }
 
 const APP_AUTHOR = 'Horldsence';
-const APP_LICENSE = 'GPLv2';
-const APP_GITHUB = 'https://github.com/Horldsence/lissio';
-const APP_DOCS = 'https://github.com/Horldsence/lissio#readme';
+// SPDX identifier shared by package.json and the Rust workspace manifests.
+// Historical-release scope and attribution are defined by NOTICE and the IP policy.
+const APP_LICENSE = 'Apache-2.0';
+// 仓库托管地为 Codeberg; 改仓库地址时这里与 i18n 的 aboutRepo 文案、README 一并更新
+const APP_REPO = 'https://codeberg.org/Horldsence/Lissio';
+const APP_DOCS = `${APP_REPO}/src/branch/main/docs/README.md`;
 
 export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const lang = useAppStore((s) => s.lang);
@@ -25,38 +29,20 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
 
   useEffect(() => {
     if (!isOpen) return;
-    void getName().then(setAppName).catch(() => setAppName('Lissio'));
-    void getVersion().then(setAppVersion).catch(() => setAppVersion('0.0.0'));
+    void platform.getAppName().then(setAppName).catch(() => setAppName('Lissio'));
+    void platform.getAppVersion().then(setAppVersion).catch(() => setAppVersion('0.0.0'));
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 bg-bg-overlay flex items-center justify-center z-modal animate-[settings-fade-in_0.15s_ease-out]"
-      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
-      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClose(); } }}
-      role="button"
-      tabIndex={0}
-    >
-      <div
-        className="w-[400px] max-w-[90vw] bg-bg-sidebar border border-border rounded-lg shadow-modal py-7 px-8 flex flex-col items-center gap-2 relative animate-[settings-slide-in_0.2s_ease-out]"
-        role="dialog"
-        aria-modal="true"
+    <DialogOverlay open={isOpen} onDismiss={onClose}>
+      <DialogSurface
+        className="w-[400px] max-w-[90vw] py-7 px-8 flex flex-col items-center gap-2 relative"
+        label={translate('aboutTitle', lang)}
       >
         <button
           className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-bg-hover hover:text-text-bright transition-colors cursor-pointer bg-transparent border-none"
           onClick={onClose}
-          title={t(lang, 'aboutClose')}
+          title={translate('aboutClose', lang)}
         >
           <X size={16} />
         </button>
@@ -67,38 +53,52 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
 
         <h2 className="text-xl font-semibold text-text-bright m-0">{appName}</h2>
         <p className="text-sm text-text-secondary m-0">
-          {t(lang, 'aboutVersion')}: <code className="bg-bg-input px-1.5 py-0.5 rounded-sm text-text-primary font-mono">v{appVersion}</code>
+          {translate('aboutVersion', lang)}: <code className="bg-bg-input px-1.5 py-0.5 rounded-sm text-text-primary font-mono">v{appVersion}</code>
         </p>
         <p className="text-sm text-text-primary text-center leading-relaxed my-2 mb-3">
-          {t(lang, 'aboutDescription')}
+          {translate('aboutDescription', lang)}
         </p>
 
         <div className="w-full flex flex-col gap-1.5 py-2 border-t border-b border-border my-2 mb-4">
           <div className="flex justify-between text-sm">
-            <span className="text-text-secondary">{t(lang, 'aboutAuthor')}</span>
+            <span className="text-text-secondary">{translate('aboutAuthor', lang)}</span>
             <span className="text-text-primary">{APP_AUTHOR}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-text-secondary">{t(lang, 'aboutLicense')}</span>
+            <span className="text-text-secondary">{translate('aboutLicense', lang)}</span>
             <span className="text-text-primary">{APP_LICENSE}</span>
           </div>
         </div>
 
+        <div className="w-full text-left mb-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.5px] text-text-secondary mb-1.5">
+            {translate('aboutFonts', lang)}
+          </div>
+          <ul className="m-0 p-0 list-none flex flex-col gap-1">
+            {FONT_ATTRIBUTIONS.map((font) => (
+              <li key={font.family} className="text-[10px] leading-snug text-text-secondary">
+                <span className="text-text-primary">{font.family}</span>
+                {' — '}{font.license}{' — '}{font.copyright}
+              </li>
+            ))}
+          </ul>
+        </div>
+
         <div className="flex gap-2 mb-4">
           <button
-            className="bg-transparent text-text-primary border border-border px-2.5 py-1 text-xs cursor-pointer rounded inline-flex items-center gap-1.5 transition-all hover:bg-bg-hover hover:border-accent hover:text-text-bright"
-            onClick={() => void openUrl(APP_GITHUB)}
+            className="bg-transparent text-text-primary border border-border px-2.5 py-1 text-xs cursor-pointer rounded inline-flex items-center gap-1.5 motion-transition hover:bg-bg-hover hover:border-accent hover:text-text-bright"
+            onClick={() => void platform.openUrl(APP_REPO)}
           >
-            <Github size={14} />
-            <span>{t(lang, 'aboutGithub')}</span>
-            <ExternalLink size={10} className="opacity-60" />
+            <Code size={14} />
+            <span>{translate('aboutRepo', lang)}</span>
+            <ExternalLink size={10} className="opacity-muted" />
           </button>
           <button
-            className="bg-transparent text-text-primary border border-border px-2.5 py-1 text-xs cursor-pointer rounded inline-flex items-center gap-1.5 transition-all hover:bg-bg-hover hover:border-accent hover:text-text-bright"
-            onClick={() => void openUrl(APP_DOCS)}
+            className="bg-transparent text-text-primary border border-border px-2.5 py-1 text-xs cursor-pointer rounded inline-flex items-center gap-1.5 motion-transition hover:bg-bg-hover hover:border-accent hover:text-text-bright"
+            onClick={() => void platform.openUrl(APP_DOCS)}
           >
-            <span>{t(lang, 'aboutDocs')}</span>
-            <ExternalLink size={10} className="opacity-60" />
+            <span>{translate('aboutDocs', lang)}</span>
+            <ExternalLink size={10} className="opacity-muted" />
           </button>
         </div>
 
@@ -107,10 +107,13 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
             className="px-3 py-1.5 bg-bg-button text-text-inverse border-none rounded cursor-pointer text-sm text-center transition-colors hover:bg-bg-button-hover"
             onClick={onClose}
           >
-            {t(lang, 'aboutClose')}
+            {translate('aboutClose', lang)}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogSurface>
+    </DialogOverlay>
   );
 }
+
+/// 懒加载入口 — 见 `components/lazy/lazyComponents.ts` (全仓唯一 React.lazy 清单)。
+export default AboutModal;

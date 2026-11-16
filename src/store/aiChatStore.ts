@@ -1,95 +1,29 @@
 import { create } from 'zustand';
-import { Channel } from '@tauri-apps/api/core';
 import { api } from '../lib/tauri/tauri';
 import { notify } from '../lib/tauri/notifications';
 import { formatAiKindError } from '../lib/ai/aiErrors';
 import { checkAiProviderSettings } from '../settings/aiProvider';
 import { useSettingsStore } from './settingsStore';
 import { useAppStore } from './appStore';
-import { t } from '../i18n';
-import type {
-  AiChatEvent,
-  AiSessionMeta,
-  AiToolRun,
-  AiViewItem,
-  McpServerConfig,
-  McpToolInfo,
-} from '../types';
+import { translate } from '../i18n';
+import type { AiAttachment, AiViewItem } from '../types';
+import type { AiChatState } from './aiChatStoreTypes';
+import { createMcpServerActions } from './aiChatStoreMcp';
+import {
+  appendTextEvent,
+  errorItemFromRejection,
+  openChatChannel,
+  providerConfigFromSettings,
+} from './aiChatStoreSupport';
 
-interface AiChatState {
-  /** 会话摘要列表 (后端持有) */
-  sessions: AiSessionMeta[];
-  /** 当前会话 id */
-  activeSessionId: string | null;
-  /** 当前会话的视图条目 — 由后端会话水合 */
-  viewItems: AiViewItem[];
-  /** 正在流式生成 (全局同一时刻至多一个任务) */
-  streaming: boolean;
-  /** 流式回合所属会话 — 切换会话时气泡只在所属会话内显示 */
-  streamingSessionId: string | null;
-  /** 当前流式文本聚合 */
-  streamingText: string;
-  /** 当前推理文本聚合 */
-  reasoningText: string;
-  /** 当前回合的工具调用记录 */
-  toolRuns: AiToolRun[];
-  /** 进行中的 task_id (可取消) */
-  taskId: string | null;
-  /** 聚合工具列表缓存 */
-  tools: McpToolInfo[];
-  /** 外部 server 配置缓存 */
-  servers: McpServerConfig[];
-  /** 本地 MCP server 状态 */
-  serverRunning: boolean;
-  serverPort: number | null;
+export type { AiChatState } from './aiChatStoreTypes';
 
-  refreshSessions: () => Promise<void>;
-  createSession: (title: string) => Promise<void>;
-  switchSession: (id: string) => Promise<void>;
-  renameSession: (id: string, title: string) => Promise<void>;
-  deleteSession: (id: string) => Promise<void>;
-  send: (text: string) => Promise<void>;
-  /** 重新生成 — 截掉最后一条用户条目之后的回合并重跑 */
-  regenerate: () => Promise<void>;
-  cancel: () => Promise<void>;
-  clearSession: () => Promise<void>;
-  refreshTools: () => Promise<void>;
-  refreshServers: () => Promise<void>;
-  refreshServerStatus: () => Promise<void>;
-  startLocalServer: () => Promise<void>;
-  stopLocalServer: () => Promise<void>;
-  addServer: (config: McpServerConfig) => Promise<void>;
-  removeServer: (id: string) => Promise<void>;
-  setServerEnabled: (id: string, enabled: boolean) => Promise<void>;
-}
 
-/** 从设置读取 provider 配置 (随请求传给后端, 后端不落盘) */
-function providerConfigFromSettings() {
-  const ai = useSettingsStore.getState().settings.ai;
-  return {
-    adapter: ai.adapter,
-    base_url: ai.baseUrl,
-    api_key: ai.apiKey,
-    model: ai.model,
-    temperature: ai.temperature,
-    max_tokens: ai.maxTokens,
-  };
-}
+/// Streaming updates are batched over roughly three frames.
+const STREAM_FLUSH_MS = 50;
 
-/** 命令级失败 (invoke reject 的结构化错误对象) → 本地错误条目 (kind/data 透传, 渲染时本地化) */
-function errorItemFromRejection(err: unknown): AiViewItem {
-  if (err && typeof err === 'object' && 'kind' in err) {
-    const e = err as { message?: string; kind?: string; data?: Record<string, string> };
-    return {
-      role: 'assistant',
-      text: e.message ?? 'AI request failed',
-      error: true,
-      error_kind: e.kind,
-      error_data: e.data,
-    };
-  }
-  return { role: 'assistant', text: err instanceof Error ? err.message : String(err), error: true };
-}
+/// Flush the current stream buffer before terminal state settlement.
+let flushStreaming: (() => void) | null = null;
 
 export const useAiChatStore = create<AiChatState>()((set, get) => {
   /** 后端条目 → 视图条目 (同构, 仅收紧类型) */
@@ -102,37 +36,89 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
    */
   const startTask = async (
     sessionId: string,
-    payload: { text: string | null; regenerate: boolean },
+    payload: { text: string | null; attachments: AiAttachment[] | null; regenerate: boolean },
     failLocal: (err: unknown) => void
   ) => {
     const ai = useSettingsStore.getState().settings.ai;
-    const channel = new Channel<AiChatEvent>();
+    // 通道由出口构造 — Web 出口未接入 AI 命令, 构造即抛结构化错误
+    // (kind=UnsupportedCommand), 因此 AI 面板在浏览器里给出明确提示,
+    // 而不是 Tauri 运行时缺失时的无 kind TypeError。
+    const channel = openChatChannel(failLocal);
+    if (!channel) return;
+    // 流式增量合批 — 一个窗口内的 delta 合并成一次 store 更新。逐个 token 触发
+    // 全量重渲染会把渲染进程拖垮 (长会话 + 长回复时表现为白屏后自动重载):
+    // 窗口内保持事件顺序, 工具/终态事件先冲刷缓冲再处理, 不丢也不乱序。
+    let pending: { kind: 'text' | 'reasoning'; text: string }[] = [];
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushPending = () => {
+      if (flushTimer !== null) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      if (pending.length === 0) return;
+      const chunks = pending;
+      pending = [];
+      set((s) => {
+        let streamingText = s.streamingText;
+        let reasoningText = s.reasoningText;
+        let timeline = s.timeline;
+        for (const chunk of chunks) {
+          if (chunk.kind === 'text') {
+            streamingText += chunk.text;
+            timeline = appendTextEvent(timeline, 'text', chunk.text);
+          } else {
+            reasoningText += chunk.text;
+            timeline = appendTextEvent(timeline, 'reasoning', chunk.text);
+          }
+        }
+        return { streamingText, reasoningText, timeline };
+      });
+    };
+    const pushDelta = (kind: 'text' | 'reasoning', text: string) => {
+      if (!text) return;
+      const last = pending.length > 0 ? pending[pending.length - 1] : undefined;
+      if (last?.kind === kind) last.text += text;
+      else pending.push({ kind, text });
+      flushTimer ??= setTimeout(flushPending, STREAM_FLUSH_MS);
+    };
+    flushStreaming = flushPending;
     channel.onmessage = (event) => {
       switch (event.type) {
         case 'delta':
-          set((s) => ({ streamingText: s.streamingText + event.text }));
+          pushDelta('text', event.text);
           break;
         case 'reasoning_delta':
-          set((s) => ({ reasoningText: s.reasoningText + event.text }));
+          pushDelta('reasoning', event.text);
           break;
         case 'tool_call':
+          flushPending();
           set((s) => ({
+            timeline: [...s.timeline, { kind: 'tool', id: event.id }],
             toolRuns: [
               ...s.toolRuns,
-              { id: event.id, name: event.name, arguments: event.arguments, content: '', is_error: false, done: false },
+              { id: event.id, name: event.name, arguments: event.arguments, text_offset: s.streamingText.length, content: '', is_error: false, done: false },
             ],
           }));
           break;
-        case 'tool_result':
+        case 'tool_result': {
+          flushPending();
+          const renamed = !event.is_error && get().toolRuns.some(
+            (run) => run.id === event.id && run.name === 'set_conversation_title'
+          );
           set((s) => ({
             toolRuns: s.toolRuns.map((r) =>
               r.id === event.id ? { ...r, content: event.content, is_error: event.is_error, done: true } : r
             ),
           }));
+          if (renamed) {
+            void api.chatListSessions().then((sessions) => set({ sessions })).catch(() => undefined);
+          }
           break;
+        }
         case 'done':
         case 'cancelled':
         case 'error':
+          flushPending();
           void finishTurn();
           break;
       }
@@ -143,28 +129,33 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
       const taskId = await api.aiChatSend(
         sessionId,
         payload.text,
+        payload.attachments,
         payload.regenerate,
         providerConfigFromSettings(),
-        ai.systemPrompt.trim() || null,
-        ai.maxToolRounds,
         ai.mcpToolsEnabled,
-        ai.builtinToolsEnabled,
+        ai.pluginsEnabled && ai.builtinToolsEnabled,
+        ai.pluginsEnabled && ai.webToolsEnabled,
         lang,
         channel
       );
       set({ taskId });
     } catch (e) {
+      flushStreaming = null;
       failLocal(e);
     }
   };
 
   /** 回合收束 (done/cancelled/error 共用) — 后端已落盘, 拉取权威视图对账 */
   const finishTurn = async () => {
+    // 收束前先冲刷合批缓冲 — 否则最后一段流式文本会漏进本地聚合
+    flushStreaming?.();
+    flushStreaming = null;
     const s = get();
     const patch = {
       streaming: false,
       streamingText: '',
       reasoningText: '',
+      timeline: [],
       toolRuns: [],
       taskId: null,
       streamingSessionId: null,
@@ -173,8 +164,8 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
     const foldLocal = (items: AiViewItem[]): AiViewItem[] => {
       const tools = s.toolRuns.map((r) => ({ ...r }));
       const out = [...items];
-      if (s.streamingText || tools.length > 0) {
-        out.push({ role: 'assistant', text: s.streamingText, tools });
+      if (s.streamingText || s.reasoningText || tools.length > 0) {
+        out.push({ role: 'assistant', text: s.streamingText, reasoning: s.reasoningText, tools, timeline: s.timeline });
       }
       return out;
     };
@@ -185,6 +176,7 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
     try {
       const session = await api.chatGetSession(s.activeSessionId);
       set({ ...patch, viewItems: toViewItems(session?.items ?? []) });
+      void api.chatListSessions().then((sessions) => set({ sessions })).catch(() => undefined);
     } catch {
       set((cur) => ({ ...patch, viewItems: foldLocal(cur.viewItems) }));
     }
@@ -198,23 +190,28 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
     streamingSessionId: null,
     streamingText: '',
     reasoningText: '',
+    timeline: [],
     toolRuns: [],
     taskId: null,
     tools: [],
     servers: [],
     serverRunning: false,
     serverPort: null,
+    serverConflict: null,
 
     refreshSessions: async () => {
       try {
         const sessions = await api.chatListSessions();
         const { activeSessionId } = get();
+        // 回退到最近活动的会话: 后端按存储顺序返回 (不是时间序), 重载后 store 为空时
+        // 取 sessions[0] 会落回最早建的会话, 用户看到的就是"历史丢了"。
+        const fallback = [...sessions].sort((a, b) => b.updated_at - a.updated_at)[0]?.id ?? null;
         set({
           sessions,
           // 当前会话已被删除 (他端) 时回退到最近一个会话
           activeSessionId: sessions.some((s) => s.id === activeSessionId)
             ? activeSessionId
-            : (sessions[0]?.id ?? null),
+            : fallback,
         });
         if (get().activeSessionId) await get().switchSession(get().activeSessionId!);
       } catch {
@@ -240,6 +237,7 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
           viewItems: [],
           streamingText: '',
           reasoningText: '',
+          timeline: [],
           toolRuns: [],
         }));
       } catch {
@@ -277,32 +275,34 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
       }
     },
 
-    send: async (text) => {
+    send: async (text, attachments = []) => {
       const { streaming, activeSessionId, viewItems } = get();
       const body = text.trim();
-      if (streaming || !body || !activeSessionId) return;
+      const atts = attachments.filter((a) => a.content);
+      if (streaming || (!body && atts.length === 0) || !activeSessionId) return;
 
       // 发送前检查 (与后端 validate_config 同规则): 配置缺失直接拦截, 不发请求
       const issue = checkAiProviderSettings(useSettingsStore.getState().settings.ai);
       if (issue) {
         const lang = useAppStore.getState().lang;
         const view = formatAiKindError(issue.kind, issue.params, '', lang);
-        notify.error(t(lang, 'aiSendBlocked'), view.summary, { source: 'ai-send' });
+        notify.error(translate('aiSendBlocked', lang), view.summary, { source: 'ai-send' });
         return;
       }
 
       set({
-        viewItems: [...viewItems, { role: 'user', text: body }],
+        viewItems: [...viewItems, { role: 'user', text: body, attachments: atts.length > 0 ? atts : undefined }],
         streaming: true,
         streamingSessionId: activeSessionId,
         streamingText: '',
         reasoningText: '',
+        timeline: [],
         toolRuns: [],
       });
 
       await startTask(
         activeSessionId,
-        { text: body, regenerate: false },
+        { text: body || null, attachments: atts.length > 0 ? atts : null, regenerate: false },
         // 命令级失败: 后端未写入, 本地呈现结构化错误条目 (kind/data 透传供本地化)
         (err) =>
           set((s) => ({
@@ -310,6 +310,7 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
             streamingSessionId: null,
             streamingText: '',
             reasoningText: '',
+            timeline: [],
             toolRuns: [],
             taskId: null,
             viewItems: [...s.viewItems, errorItemFromRejection(err)],
@@ -325,7 +326,7 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
       if (issue) {
         const lang = useAppStore.getState().lang;
         const view = formatAiKindError(issue.kind, issue.params, '', lang);
-        notify.error(t(lang, 'aiSendBlocked'), view.summary, { source: 'ai-send' });
+        notify.error(translate('aiSendBlocked', lang), view.summary, { source: 'ai-send' });
         return;
       }
       // 本地乐观截断: 移除最后一条用户条目之后的条目 (与后端 truncate 对称)
@@ -342,18 +343,20 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
         streamingSessionId: activeSessionId,
         streamingText: '',
         reasoningText: '',
+        timeline: [],
         toolRuns: [],
       });
 
       await startTask(
         activeSessionId,
-        { text: null, regenerate: true },
+        { text: null, attachments: null, regenerate: true },
         (err) =>
           set((s) => ({
             streaming: false,
             streamingSessionId: null,
             streamingText: '',
             reasoningText: '',
+            timeline: [],
             toolRuns: [],
             taskId: null,
             viewItems: [...s.viewItems, errorItemFromRejection(err)],
@@ -374,6 +377,7 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
         viewItems: [],
         streamingText: '',
         reasoningText: '',
+        timeline: [],
         toolRuns: [],
         taskId: null,
         streaming: false,
@@ -397,32 +401,7 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
       }
     },
 
-    refreshServerStatus: async () => {
-      try {
-        const st = await api.mcpServerStatus();
-        set({ serverRunning: st.running, serverPort: st.port });
-      } catch {
-        /* ignore */
-      }
-    },
-
-    startLocalServer: async () => {
-      const port = useSettingsStore.getState().settings.ai.mcpServerPort;
-      try {
-        const bound = await api.mcpServerStart(port);
-        set({ serverRunning: true, serverPort: bound });
-      } catch {
-        set({ serverRunning: false });
-      }
-    },
-
-    stopLocalServer: async () => {
-      try {
-        await api.mcpServerStop();
-      } finally {
-        set({ serverRunning: false, serverPort: null });
-      }
-    },
+    ...createMcpServerActions(set, get),
 
     addServer: async (config) => {
       await api.mcpAddServer(config);
@@ -430,7 +409,7 @@ export const useAiChatStore = create<AiChatState>()((set, get) => {
     },
 
     removeServer: async (id) => {
-      void api.mcpRemoveServer(id);
+      await api.mcpRemoveServer(id);
       await get().refreshServers();
       await get().refreshTools();
     },

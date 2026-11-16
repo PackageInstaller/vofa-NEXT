@@ -1,10 +1,12 @@
+use acquisition::ByteMessage;
 use can::CandleDeviceInfo;
-use data_model::{CandleConfig, Result, INGEST_CHANNEL_CAPACITY};
+use data_model::{CandleConfig, INGEST_CHANNEL_CAPACITY};
+use error::Result;
 use error::TransportError;
-use nusb::transfer::{Bulk, In, Out};
 use nusb::MaybeFuture;
-use std::sync::atomic::{AtomicBool, Ordering};
+use nusb::transfer::{Bulk, In, Out};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 
@@ -55,7 +57,7 @@ pub async fn spawn(
     config: CandleConfig,
 ) -> Result<(
     mpsc::Sender<Vec<u8>>,
-    broadcast::Sender<Vec<u8>>,
+    broadcast::Sender<ByteMessage>,
     Arc<AtomicBool>,
 )> {
     // 列举设备并按 bus/address 找到目标
@@ -122,7 +124,7 @@ pub async fn spawn(
                         Ok(buf) => {
                             let data: Vec<u8> = buf[..].to_vec();
                             if !data.is_empty() {
-                                let _ = data_tx_read.send(data);
+                                let _ = data_tx_read.send(ByteMessage::from_device(data));
                             }
                             // 重新提交读请求
                             ep_in.submit(nusb::transfer::Buffer::new(buf_size));

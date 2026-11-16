@@ -1,74 +1,22 @@
-//! `ai_chat_sessions.json` 读写与 `SessionStore` — 会话持久化 (目录由命令层传入)。
+//! `SessionStore` — 全部对话会话的内存 + 磁盘所有者。
 //!
-//! 持久化形态与 `mcp_client::store` 一致:全量 JSON 覆盖写, 无文件锁 —
-//! 并发安全由 `SessionStore` 内部互斥锁保证。
+//! 变更在锁内生效后立即落盘;落盘用「同目录临时文件 + rename」原子替换
+//! (见 [`crate::persistence`]), 因此进程被杀不会留下截断的会话文件。网络 IO
+//! 与文件锁均不引入 (与 `McpManager` 同一并发模型)。
 
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use data_model::Result;
 use error::AiError;
+use error::Result;
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
 
 use crate::types::{ChatSession, SessionMeta, ViewItemDto, ViewRoleDto};
+use data_model::now_ms;
 
-/// 会话文件名 (位于 app config dir)。
-pub const CONFIG_FILE_NAME: &str = "ai_chat_sessions.json";
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct SessionsFile {
-    #[serde(default)]
-    sessions: Vec<ChatSession>,
-}
-
-/// 会话文件完整路径。
-pub fn config_path(dir: &Path) -> PathBuf {
-    dir.join(CONFIG_FILE_NAME)
-}
-
-/// 读取全部会话;文件不存在视为空列表。
-///
-/// # Errors
-/// 文件存在但解析失败时返回 [`AiError::Persist`]。
-pub fn load_sessions(dir: &Path) -> Result<Vec<ChatSession>> {
-    let path = config_path(dir);
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let text = fs::read_to_string(&path).map_err(|source| AiError::Persist { source })?;
-    let file = serde_json::from_str::<SessionsFile>(&text).map_err(|source| AiError::Persist {
-        source: std::io::Error::other(source.to_string()),
-    })?;
-    Ok(file.sessions)
-}
-
-/// 写入全部会话 (全量覆盖)。
-///
-/// # Errors
-/// 序列化或写文件失败时返回 [`AiError::Persist`]。
-pub fn save_sessions(dir: &Path, sessions: &[ChatSession]) -> Result<()> {
-    let path = config_path(dir);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|source| AiError::Persist { source })?;
-    }
-    let file = SessionsFile {
-        sessions: sessions.to_vec(),
-    };
-    let text = serde_json::to_string_pretty(&file).map_err(|source| AiError::Persist {
-        source: std::io::Error::other(source.to_string()),
-    })?;
-    fs::write(&path, text).map_err(|source| AiError::Persist { source })?;
-    Ok(())
-}
-
-/// 当前 unix 毫秒时间戳。
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or_default())
-}
+pub use crate::persistence::{
+    CONFIG_FILE_NAME, config_path, load_sessions, quarantine_sessions_file, save_sessions,
+};
 
 /// 会话存储 — 全部对话会话的内存 + 磁盘所有者。
 ///
@@ -84,7 +32,7 @@ impl SessionStore {
     /// 从 app config dir 构造 (加载已有会话)。
     ///
     /// # Errors
-    /// 文件存在但损坏时返回 [`AiError::Persist`] (由命令层决定按空启动)。
+    /// 文件存在但损坏时返回 [`AiError::Persist`]。
     pub fn load(dir: &Path) -> Result<Self> {
         Ok(Self {
             dir: dir.to_path_buf(),
@@ -93,7 +41,30 @@ impl SessionStore {
         })
     }
 
-    /// 空存储构造 (配置损坏时的降级启动)。
+    /// 生产入口: 加载会话;损坏文件先隔离再按空会话启动。
+    ///
+    /// 与 [`SessionStore::load`] 的区别是损坏文件改名保留到
+    /// `ai_chat_sessions.corrupt-<unix_ms>.json`, 而不是只报错丢弃 —
+    /// 之后的落盘不会覆盖唯一副本。文件缺失仍是「空会话, 无错误」。
+    pub fn load_or_quarantine(dir: &Path) -> Self {
+        match Self::load(dir) {
+            Ok(store) => store,
+            Err(error) => {
+                match quarantine_sessions_file(dir) {
+                    Ok(path) => log::warn!(
+                        "AI 会话文件损坏, 已隔离为 {} 并按空会话启动: {error}",
+                        path.display()
+                    ),
+                    Err(quarantine_error) => log::warn!(
+                        "AI 会话文件损坏且隔离失败, 按空会话启动: {error}; 隔离失败: {quarantine_error}"
+                    ),
+                }
+                Self::empty(dir)
+            }
+        }
+    }
+
+    /// 空存储构造 (配置损坏或首次启动时的降级形态)。
     pub fn empty(dir: &Path) -> Self {
         Self {
             dir: dir.to_path_buf(),
@@ -173,6 +144,26 @@ impl SessionStore {
         self.persist(&sessions)
     }
 
+    /// 仅当标题仍为预期值时重命名，避免自动命名覆盖用户手动修改。
+    ///
+    /// # Errors
+    /// 会话不存在或落盘失败。
+    pub fn rename_if_matches(&self, session_id: &str, expected: &str, title: &str) -> Result<bool> {
+        let mut sessions = self.inner.lock();
+        let Some(session) = sessions.iter_mut().find(|s| s.id == session_id) else {
+            return Err(AiError::UnknownSession {
+                id: session_id.to_string(),
+            }
+            .into());
+        };
+        if session.title != expected {
+            return Ok(false);
+        }
+        session.title = title.to_string();
+        self.persist(&sessions)?;
+        Ok(true)
+    }
+
     /// 删除会话 (不存在时静默)。
     ///
     /// # Errors
@@ -220,6 +211,36 @@ impl SessionStore {
         self.persist(&sessions)
     }
 
+    /// 用当前回合快照覆盖会话尾部: 截掉最后一条用户条目之后的全部条目, 再追加
+    /// `items`。供流式中途反复调用 — 每次写入替换上一次的草稿, 回合收束时的终态
+    /// 写入不会留下重复条目。
+    ///
+    /// 会话不存在时静默丢弃;会话没有用户条目时只能退化为「直接追加」, 该形态只在
+    /// 终态写入一次 (中途落盘由调用方按锚点存在与否决定)。空 `items` 不写入。
+    ///
+    /// # Errors
+    /// 落盘失败返回 [`AiError::Persist`]。
+    pub fn upsert_turn_items(&self, session_id: &str, items: Vec<ViewItemDto>) -> Result<()> {
+        if items.is_empty() {
+            return Ok(());
+        }
+        let mut sessions = self.inner.lock();
+        let Some(session) = sessions.iter_mut().find(|s| s.id == session_id) else {
+            log::debug!("会话 {session_id} 已删除, 丢弃 {} 条回合条目", items.len());
+            return Ok(());
+        };
+        if let Some(pos) = session
+            .items
+            .iter()
+            .rposition(|item| item.role == ViewRoleDto::User)
+        {
+            session.items.truncate(pos + 1);
+        }
+        session.updated_at = now_ms();
+        session.items.extend(items);
+        self.persist(&sessions)
+    }
+
     /// 截掉最后一条用户条目之后的全部条目 (重新生成前清理)。
     /// 不存在用户条目或会话缺失时不做任何修改。
     ///
@@ -244,145 +265,5 @@ impl SessionStore {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::types::ToolRunDto;
-    use serde_json::json;
-
-    fn temp_dir(tag: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("vofa-ai-session-{tag}-{}", std::process::id()))
-    }
-
-    fn user_item(text: &str) -> ViewItemDto {
-        ViewItemDto {
-            role: ViewRoleDto::User,
-            text: text.to_string(),
-            tools: None,
-            error: None,
-            error_kind: None,
-            error_data: None,
-        }
-    }
-
-    fn assistant_item(text: &str) -> ViewItemDto {
-        ViewItemDto {
-            role: ViewRoleDto::Assistant,
-            text: text.to_string(),
-            tools: None,
-            error: None,
-            error_kind: None,
-            error_data: None,
-        }
-    }
-
-    #[test]
-    fn roundtrip_sessions_file() {
-        let dir = temp_dir("roundtrip");
-        let session = ChatSession {
-            id: "s1".to_string(),
-            title: "调试".to_string(),
-            created_at: 1,
-            updated_at: 2,
-            items: vec![
-                user_item("你好"),
-                ViewItemDto {
-                    role: ViewRoleDto::Assistant,
-                    text: "回答".to_string(),
-                    tools: Some(vec![ToolRunDto {
-                        id: "c1".to_string(),
-                        name: "probe".to_string(),
-                        arguments: json!({"value": 7}),
-                        content: "42".to_string(),
-                        is_error: false,
-                        done: true,
-                    }]),
-                    error: None,
-                    error_kind: None,
-                    error_data: None,
-                },
-            ],
-        };
-
-        save_sessions(&dir, std::slice::from_ref(&session)).expect("保存会话");
-        let loaded = load_sessions(&dir).expect("读取会话");
-        assert_eq!(loaded, vec![session]);
-
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    /// 不存在的目录读取返回空列表 (首次启动零会话)。
-    #[test]
-    fn missing_file_is_empty() {
-        let dir = temp_dir("missing");
-        let loaded = load_sessions(&dir).expect("缺失文件应视为空");
-        assert!(loaded.is_empty());
-    }
-
-    #[test]
-    fn store_create_append_and_meta() {
-        let dir = temp_dir("store");
-        let store = SessionStore::empty(&dir);
-
-        let session = store.create("新会话").expect("新建会话");
-        store
-            .append_items(&session.id, vec![user_item("hi"), assistant_item("hello")])
-            .expect("追加条目");
-
-        let metas = store.list_metas();
-        assert_eq!(metas.len(), 1);
-        assert_eq!(metas[0].title, "新会话");
-        assert_eq!(metas[0].item_count, 2);
-
-        let loaded = store.get(&session.id).expect("读取会话");
-        assert_eq!(loaded.items.len(), 2);
-
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn store_rename_remove_clear_truncate() {
-        let dir = temp_dir("mutate");
-        let store = SessionStore::empty(&dir);
-        let s1 = store.create("a").expect("新建");
-        let s2 = store.create("b").expect("新建");
-        store
-            .append_items(
-                &s1.id,
-                vec![user_item("hi"), assistant_item("x"), assistant_item("y")],
-            )
-            .expect("追加");
-
-        store.rename(&s1.id, "改名").expect("重命名");
-        assert_eq!(store.get(&s1.id).unwrap().title, "改名");
-        assert!(store.rename("nope", "x").is_err(), "未知会话应报错");
-
-        store.truncate_after_last_user(&s1.id).expect("截断");
-        assert_eq!(store.get(&s1.id).unwrap().items.len(), 1);
-
-        store.clear_items(&s1.id).expect("清空");
-        assert!(store.get(&s1.id).unwrap().items.is_empty());
-
-        store.remove(&s2.id).expect("删除");
-        assert!(store.get(&s2.id).is_none());
-        // 静默语义: 重复删除 / 对缺失会话追加与清空都不报错
-        store.remove(&s2.id).expect("重复删除静默");
-        store
-            .append_items(&s2.id, vec![user_item("hi")])
-            .expect("缺失会话追加静默");
-        store.clear_items(&s2.id).expect("缺失会话清空静默");
-
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    /// 损坏的会话文件 → load 报 Persist 错误 (命令层降级为空启动)。
-    #[test]
-    fn corrupt_file_errors() {
-        let dir = temp_dir("corrupt");
-        std::fs::create_dir_all(&dir).expect("建目录");
-        std::fs::write(config_path(&dir), "{ not json").expect("写坏文件");
-
-        assert!(load_sessions(&dir).is_err());
-
-        std::fs::remove_dir_all(&dir).ok();
-    }
-}
+#[path = "store_tests.rs"]
+mod tests;

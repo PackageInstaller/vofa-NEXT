@@ -7,65 +7,48 @@
 //! - ESC 关闭, 点击遮罩关闭
 
 import { Fragment, useEffect, useMemo, useRef, useState, useActionState } from 'react';
-import { activateOnKeyboard } from '../lib/utils/a11y';
 import {
   X,
-  Search,
   RotateCcw,
   Check,
-  Settings as SettingsIcon,
-  Palette,
-  Sliders,
-  Usb,
-  Bell,
   Type,
-  Database,
-  Gauge,
-  Pencil,
-  Download,
-  Upload,
   RefreshCw,
-  Sparkles,
-  ExternalLink,
+  ChevronRight,
 } from 'lucide-react';
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { ORCAROUTER_OFFERS_URL, ORCAROUTER_REFERRAL_URL } from '../settings/defaults';
-import { getVersion } from '@tauri-apps/api/app';
+import { platform } from '../lib/platform';
+import { hasTauriRuntime } from '../lib/rpc';
 import { useSettingsStore } from '../store/settingsStore';
+import type { AiSettingsSection } from '../store/settingsStore';
+import { useAiChatStore } from '../store/aiChatStore';
 import { useAppStore } from '../store/appStore';
-import { t } from '../i18n';
-import type { Lang } from '../i18n';
+import { translate } from '../i18n';
 import type { AppSettings } from '../settings/defaults';
 import { ThemeEditor } from './ThemeEditor';
-import { BUILT_IN_THEMES, type ThemeDefinition } from '../settings/theme';
 import type { SettingFieldDef} from './settingFields';
-import { SETTING_FIELDS } from './settingFields';
-import { exportAppToFile, importAppFromFile } from '../lib/tauri/appExport';
+import { buildSettingFields } from './settingFields';
+import { useModelCatalogStore } from '../store/modelCatalogStore';
 import { formatError } from '../lib/tauri/notifications';
 import { BackupModal } from './BackupModal';
 import { useUpdateStore, type UpdateChannel } from '../store/updateStore';
+import { SearchInput } from './ui/SearchInput';
+import { DialogHeader, DialogOverlay, DialogSurface } from './ui/Dialog';
+import { AiMcpSettings } from './ai/AiMcpSettings';
+import { AiPluginSettings, AiSettingsSections } from './ai/AiSettingsSections';
+import { SettingsControl } from './SettingsControl';
+import { UpdateChannelDialog } from './UpdateChannelDialog';
+import { CATEGORY_LABEL_KEY } from './settingsCategories';
+import { OrcaRouterPromo } from './OrcaRouterPromo';
+import {
+  SettingsResetButton,
+  SettingsSidebarNavigation,
+} from './SettingsSidebarSections';
 
-const CATEGORY_ICONS: Record<keyof AppSettings, React.ReactNode> = {
-  general: <SettingsIcon size={16} />,
-  appearance: <Palette size={16} />,
-  editor: <Sliders size={16} />,
-  data: <Database size={16} />,
-  serial: <Usb size={16} />,
-  notifications: <Bell size={16} />,
-  performance: <Gauge size={16} />,
-  ai: <Sparkles size={16} />,
+const AI_SECTION_FIELDS: Record<Exclude<AiSettingsSection, 'main'>, ReadonlySet<string>> = {
+  plugins: new Set(['builtinToolsEnabled', 'webToolsEnabled']),
+  mcp: new Set(['mcpServerPort']),
 };
 
-const CATEGORY_LABEL_KEY: Record<keyof AppSettings, string> = {
-  general: 'settingsGeneral',
-  appearance: 'settingsAppearance',
-  editor: 'settingsEditor',
-  data: 'settingsData',
-  serial: 'settingsSerial',
-  notifications: 'settingsNotifications',
-  performance: 'settingsPerformance',
-  ai: 'settingsAi',
-};
+const AI_NAV_FIELDS = new Set(['pluginsEnabled', 'mcpToolsEnabled']);
 
 export function SettingsModal() {
   const lang = useAppStore((s) => s.lang);
@@ -80,6 +63,9 @@ export function SettingsModal() {
   const update = useSettingsStore((s) => s.update);
   const reset = useSettingsStore((s) => s.reset);
   const resetCategory = useSettingsStore((s) => s.resetCategory);
+  // AI 二级页在 store 里 — 端口冲突提示可以直达 MCP 页
+  const aiSection = useSettingsStore((s) => s.aiSection);
+  const setAiSection = useSettingsStore((s) => s.setAiSection);
   const [themeEditorOpen, setThemeEditorOpen] = useState(false);
   const [backupModalOpen, setBackupModalOpen] = useState(false);
   const [appVersion, setAppVersion] = useState('');
@@ -100,32 +86,31 @@ export function SettingsModal() {
 
   // 读取当前应用版本
   useEffect(() => {
-    void getVersion().then(setAppVersion).catch(() => setAppVersion(''));
+    void platform.getAppVersion().then(setAppVersion).catch(() => setAppVersion(''));
   }, []);
 
-  // ESC 关闭 + 自动聚焦搜索框
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('keydown', handler);
-    // 延迟聚焦避免与打开动画冲突
-    const t = setTimeout(() => searchInputRef.current?.focus(), 50);
-    return () => {
-      window.removeEventListener('keydown', handler);
-      clearTimeout(t);
-    };
-  }, [isOpen, close]);
+  // 设置项清单 — AI provider 选项来自模型目录 (aiProvider 家族)
+  const catalogModels = useModelCatalogStore((s) => s.models);
+  const settingFields = useMemo(() =>
+    buildSettingFields(catalogModels).filter((field) =>
+      hasTauriRuntime() || field.control.kind !== 'openSettingsFolder'
+    ), [catalogModels]);
 
   // 搜索过滤
   const filteredFields = useMemo(() => {
-    if (!searchQuery.trim()) return SETTING_FIELDS;
+    const searchActive = searchQuery.trim().length > 0;
+    const baseFields = activeCategory === 'ai' && !searchActive
+      ? settingFields.filter((field) =>
+          !AI_NAV_FIELDS.has(field.field)
+          && !Object.values(AI_SECTION_FIELDS).some((fields) => fields.has(field.field))
+        )
+      : settingFields;
+    if (!searchActive) return baseFields;
     const q = searchQuery.toLowerCase();
-    return SETTING_FIELDS.filter((f) => {
-      const label = t(lang, f.labelKey).toLowerCase();
-      const desc = t(lang, f.descKey).toLowerCase();
-      const category = t(lang, CATEGORY_LABEL_KEY[f.category]).toLowerCase();
+    return baseFields.filter((f) => {
+      const label = translate(f.labelKey, lang).toLowerCase();
+      const desc = translate(f.descKey, lang).toLowerCase();
+      const category = translate(CATEGORY_LABEL_KEY[f.category], lang).toLowerCase();
       return (
         label.includes(q) ||
         desc.includes(q) ||
@@ -134,7 +119,7 @@ export function SettingsModal() {
         (f.keywords?.some((k) => k.toLowerCase().includes(q)) ?? false)
       );
     });
-  }, [lang, searchQuery]);
+  }, [activeCategory, lang, searchQuery, settingFields]);
 
   // 按分类分组
   const groupedFields = useMemo(() => {
@@ -170,20 +155,17 @@ export function SettingsModal() {
     { ok: true }
   );
 
-  if (!isOpen) return null;
-
-  // 更新按钮行为与状态文案
   const updateBusy = updateStatus === 'checking' || updateStatus === 'downloading';
   const updateLabel =
     updateStatus === 'checking'
-      ? t(lang, 'updateChecking')
+      ? translate('updateChecking', lang)
       : updateStatus === 'available' && updateInfo
-        ? `${t(lang, 'updateDownload')} v${updateInfo.version}`
+        ? `${translate('updateDownload', lang)} v${updateInfo.version}`
         : updateStatus === 'downloading'
-          ? `${t(lang, 'updateDownloading')} ${updateProgress}%`
+          ? `${translate('updateDownloading', lang)} ${updateProgress}%`
           : updateStatus === 'ready'
-            ? t(lang, 'updateRelaunch')
-            : t(lang, 'updateCheck');
+            ? translate('updateRelaunch', lang)
+            : translate('updateCheck', lang);
   const handleUpdateClick = () => {
     if (updateStatus === 'ready') void relaunchApp();
     else if (updateStatus === 'available') void downloadAndInstall();
@@ -194,229 +176,92 @@ export function SettingsModal() {
   const effectiveChannel: UpdateChannel =
     updateChannel ?? (appVersion.includes('-') ? 'beta' : 'stable');
 
-  // 渲染单个控件
-  const renderControl = (def: SettingFieldDef) => {
-    const category = def.category;
-    const value = (settings[category] as Record<string, unknown>)[def.field];
-
-    const handleChange = (v: unknown) => {
-      // 设置项的 category+field 组合来自 SETTING_FIELDS 静态表, 类型保证安全
-      // 但 TypeScript 无法静态推断, 此处用 type assertion
-      (update as (c: keyof AppSettings, f: string, v: unknown) => void)(
-        category,
-        def.field,
-        v
-      );
-      // 语言切换同步到 appStore
-      if (category === 'general' && def.field === 'language') {
-        setLang(v as Lang);
+  const renderControl = (def: SettingFieldDef) => (
+    <SettingsControl
+      def={def}
+      settings={settings}
+      update={(category, field, value) =>
+        (update as (c: keyof AppSettings, f: string, v: unknown) => void)(category, field, value)
       }
-    };
-
-    const ctrl = def.control;
-    switch (ctrl.kind) {
-      case 'toggle':
-        return (
-          <label className="settings-toggle">
-            <span className="sr-only">{def.field}</span>
-            <input
-              type="checkbox"
-              checked={Boolean(value)}
-              onChange={(e) => handleChange(e.target.checked)}
-            />
-            <span className="settings-toggle-slider" />
-          </label>
-        );
-      case 'select':
-        return (
-          <select
-            className="w-full px-2 py-1 bg-bg-input text-text-primary border border-border rounded text-sm focus:outline-none focus:border-accent transition-colors cursor-pointer min-w-[140px]"
-            value={String(value)}
-            onChange={(e) => {
-              const opt = ctrl.options.find((o) => String(o.value) === e.target.value);
-              if (opt) handleChange(opt.value);
-            }}
-          >
-            {ctrl.options.map((o) => (
-              <option key={String(o.value)} value={String(o.value)}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        );
-      case 'number':
-        return (
-          <input
-            type="number"
-            className="w-full px-2 py-1 bg-bg-input text-text-primary border border-border rounded text-sm font-ui focus:outline-none focus:border-accent transition-colors w-[120px]"
-            value={value as number}
-            min={ctrl.min}
-            max={ctrl.max}
-            step={ctrl.step}
-            onChange={(e) => {
-              const n = Number(e.target.value);
-              if (!Number.isNaN(n)) handleChange(n);
-            }}
-          />
-        );
-      case 'text':
-        return (
-          <input
-            type="text"
-            className="w-full px-2 py-1 bg-bg-input text-text-primary border border-border rounded text-sm font-ui focus:outline-none focus:border-accent transition-colors"
-            value={String(value)}
-            onChange={(e) => handleChange(e.target.value)}
-          />
-        );
-      case 'theme': {
-        const themeOptions = [
-          ...BUILT_IN_THEMES.map((t) => ({ value: t.id, label: t.name })),
-          ...settings.appearance.customThemes.map((t: ThemeDefinition) => ({
-            value: t.id,
-            label: t.name,
-          })),
-        ];
-        return (
-          <div className="flex items-center gap-2 min-w-[220px]">
-            <select
-              className="flex-1 px-2 py-1 bg-bg-input text-text-primary border border-border rounded text-sm focus:outline-none focus:border-accent transition-colors cursor-pointer"
-              value={String(value)}
-              onChange={(e) => {
-                const opt = themeOptions.find((o) => o.value === e.target.value);
-                if (opt) handleChange(opt.value);
-              }}
-            >
-              {themeOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <button
-              className="px-2 py-1 bg-bg-input text-text-primary border border-border rounded text-sm hover:bg-bg-hover hover:text-text-bright transition-colors cursor-pointer inline-flex items-center gap-1"
-              onClick={() => setThemeEditorOpen(true)}
-              title={t(lang, 'themeEdit')}
-            >
-              <Pencil size={12} />
-              <span>{t(lang, 'themeEdit')}</span>
-            </button>
-          </div>
-        );
-      }
-    }
+      setLang={setLang}
+      onEditTheme={() => setThemeEditorOpen(true)}
+    />
+  );
+  const updateAiBoolean = (field: keyof AppSettings['ai'], value: boolean) => {
+    (update as (c: keyof AppSettings, f: string, v: unknown) => void)('ai', field, value);
   };
+  const aiSectionLabel = aiSection === 'plugins'
+    ? translate('settingsAiSectionPlugins', lang)
+    : aiSection === 'mcp'
+      ? translate('settingsAiSectionMcp', lang)
+      : null;
 
   return (
-    <div
-      className="fixed inset-0 bg-bg-overlay z-[9000] flex items-center justify-center animate-[settings-fade-in_0.15s_ease-out]"
-      onClick={(event) => { if (event.target === event.currentTarget) close(); }}
-      onKeyDown={activateOnKeyboard}
-      role="button"
-      tabIndex={0}
-    >
-      <div
-        className="w-[820px] max-w-[92vw] h-[600px] max-h-[88vh] bg-bg-sidebar border border-border rounded-lg shadow-modal flex flex-col overflow-hidden animate-[settings-slide-in_0.2s_ease-out]"
-        role="dialog"
-        aria-modal="true"
+    <DialogOverlay open={isOpen} onDismiss={close}>
+      <DialogSurface
+        className="w-[820px] max-w-[92vw] h-[600px] max-h-[88vh]"
+        label={translate('settingsTitle', lang)}
+        initialFocus={searchInputRef}
       >
         {/* 顶部 — 标题 + 搜索框 + 关闭 */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-bg-panel-header flex-shrink-0">
+        <DialogHeader className="gap-3">
           <div className="flex items-center gap-1.5 text-text-bright text-base font-semibold flex-shrink-0">
             <Type size={16} />
-            <span>{t(lang, 'settingsTitle')}</span>
+            <span>{translate('settingsTitle', lang)}</span>
           </div>
-          <div className="flex-1 flex items-center gap-1.5 bg-bg-input border border-border rounded px-2 py-1 focus-within:border-accent transition-colors">
-            <Search size={14} className="text-text-secondary flex-shrink-0" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              className="search-input flex-1 bg-transparent border-none outline-none text-text-primary text-sm font-ui"
-              placeholder={t(lang, 'settingsSearch')}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <button className="w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer" onClick={close} title={t(lang, 'settingsClose')}>
+          {/* ESC 先清空搜索, 空值才冒泡到 window 关闭弹窗 (SearchInput 内处理) */}
+          <SearchInput
+            size="md"
+            className="flex-1"
+            inputRef={searchInputRef}
+            placeholder={translate('settingsSearch', lang)}
+            value={searchQuery}
+            onChange={(value) => {
+              setAiSection('main');
+              setSearchQuery(value);
+            }}
+          />
+          <button className="w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer" onClick={close} title={translate('settingsClose', lang)}>
             <X size={16} />
           </button>
-        </div>
+        </DialogHeader>
 
         {/* 主体 — 左侧分类 + 右侧表单 */}
         <div className="flex-1 flex min-h-0">
-          <div className="w-50 bg-bg-sidebar border-r border-border py-2 flex flex-col flex-shrink-0 overflow-y-auto">
-            {(Object.keys(CATEGORY_LABEL_KEY) as (keyof AppSettings)[]).map((cat) => {
-              const isActive =
-                !searchQuery.trim() && activeCategory === cat;
-              return (
-                <div
-                  key={cat}
-                  className={`flex items-center gap-2.5 px-4 py-2 text-text-secondary text-sm cursor-pointer transition-all duration-150 border-l-2 border-transparent hover:bg-bg-hover hover:text-text-primary ${isActive ? 'text-text-bright bg-bg-hover border-l-accent' : ''}`}
-                  onClick={() => {
-                    setActiveCategory(cat);
-                    setSearchQuery('');
-                  }}
-                  onKeyDown={activateOnKeyboard}
-                  role="button"
-                  tabIndex={0}
-                >
-                  {CATEGORY_ICONS[cat]}
-                  <span>{t(lang, CATEGORY_LABEL_KEY[cat])}</span>
-                </div>
-              );
-            })}
-            <div className="flex-1" />
+          <div className="w-50 dialog-chrome-muted border-r border-border py-2 flex flex-col flex-shrink-0 overflow-y-auto">
+            <SettingsSidebarNavigation
+              activeCategory={activeCategory}
+              searchQuery={searchQuery}
+              onSelectCategory={(category) => {
+                setActiveCategory(category);
+                setSearchQuery('');
+                setAiSection('main');
+              }}
+              onOpenBackup={() => setBackupModalOpen(true)}
+            />
             <div className="mt-2 border-t border-border px-4 pt-2 pb-1">
-              <div className="text-xs font-semibold uppercase tracking-[0.5px] text-text-secondary mb-1">
-                {t(lang, 'backupCategory')}
-              </div>
-              <button
-                className="w-full flex items-center gap-2.5 py-1.5 text-text-secondary text-sm cursor-pointer transition-all duration-150 hover:text-text-bright"
-                onClick={() => void exportAppToFile()}
-                title={t(lang, 'exportConfig')}
-              >
-                <Download size={14} />
-                <span>{t(lang, 'exportConfig')}</span>
-              </button>
-              <button
-                className="w-full flex items-center gap-2.5 py-1.5 text-text-secondary text-sm cursor-pointer transition-all duration-150 hover:text-text-bright"
-                onClick={() => void importAppFromFile()}
-                title={t(lang, 'importConfig')}
-              >
-                <Upload size={14} />
-                <span>{t(lang, 'importConfig')}</span>
-              </button>
-              <button
-                className="w-full flex items-center gap-2.5 py-1.5 text-text-secondary text-sm cursor-pointer transition-all duration-150 hover:text-text-bright"
-                onClick={() => setBackupModalOpen(true)}
-                title={t(lang, 'backupCustom')}
-              >
-                <Database size={14} />
-                <span>{t(lang, 'backupCustom')}</span>
-              </button>
-            </div>
-            <div className="mt-2 border-t border-border px-4 pt-2 pb-1">
-              <div className="text-xs font-semibold uppercase tracking-[0.5px] text-text-secondary mb-1">
-                {t(lang, 'updateCategory')}
+              <div className="section-heading mb-1">
+                {translate('updateCategory', lang)}
               </div>
               {appVersion && (
                 <div className="text-xs text-text-secondary pb-1">
-                  {t(lang, 'updateCurrentVersion')}: v{appVersion}
+                  {translate('updateCurrentVersion', lang)}: v{appVersion}
                 </div>
               )}
               <button
-                className={`w-full flex items-center gap-2.5 py-1.5 text-text-secondary text-sm transition-all duration-150 ${
-                  updateBusy ? 'opacity-60 cursor-wait' : 'cursor-pointer hover:text-text-bright'
+                className={`w-full flex items-center gap-2.5 py-1.5 text-text-secondary text-sm motion-transition ${
+                  updateBusy ? 'opacity-muted cursor-wait' : 'cursor-pointer hover:text-text-bright'
                 }`}
                 onClick={handleUpdateClick}
                 disabled={updateBusy}
                 title={updateLabel}
               >
-                <RefreshCw size={14} className={updateBusy ? 'animate-spin' : ''} />
+                <RefreshCw size={14} className={updateBusy ? 'motion-spin' : ''} />
                 <span>{updateLabel}</span>
               </button>
               <div className="flex items-center justify-between gap-2 py-1.5">
-                <span className="text-xs text-text-secondary" title={t(lang, 'updateChannelDesc')}>
-                  {t(lang, 'updateChannel')}
+                <span className="text-xs text-text-secondary" title={translate('updateChannelDesc', lang)}>
+                  {translate('updateChannel', lang)}
                 </span>
                 <select
                   className="px-2 py-0.5 bg-bg-input text-text-primary border border-border rounded text-xs focus:outline-none focus:border-accent transition-colors cursor-pointer"
@@ -426,94 +271,95 @@ export function SettingsModal() {
                     if (next !== effectiveChannel) setPendingChannel(next);
                   }}
                 >
-                  <option value="stable">{t(lang, 'updateChannelStable')}</option>
-                  <option value="beta">{t(lang, 'updateChannelBeta')}</option>
+                  <option value="stable">{translate('updateChannelStable', lang)}</option>
+                  <option value="beta">{translate('updateChannelBeta', lang)}</option>
                 </select>
               </div>
               {updateStatus === 'downloading' && (
                 <div className="h-1 rounded-full bg-bg-hover overflow-hidden mb-1">
                   <div
-                    className="h-full bg-accent transition-all duration-200"
+                    className="h-full bg-accent motion-transition"
                     style={{ width: `${updateProgress}%` }}
                   />
                 </div>
               )}
               {updateStatus === 'up-to-date' && (
-                <div className="text-xs text-text-secondary pb-1">{t(lang, 'updateUpToDate')}</div>
+                <div className="text-xs text-text-secondary pb-1">{translate('updateUpToDate', lang)}</div>
               )}
               {updateStatus === 'ready' && (
-                <div className="text-xs text-text-secondary pb-1">{t(lang, 'updateReady')}</div>
+                <div className="text-xs text-text-secondary pb-1">{translate('updateReady', lang)}</div>
               )}
               {updateStatus === 'error' && updateError && (
-                <div className="text-xs text-red-400 pb-1 break-all">
-                  {t(lang, 'updateError')}: {updateError}
+                <div className="text-xs text-text-danger pb-1 break-all">
+                  {translate('updateError', lang)}: {updateError}
                 </div>
               )}
             </div>
-            <div
-              className="flex items-center gap-2.5 px-4 py-2 text-text-secondary text-sm cursor-pointer transition-all duration-150 border-l-2 border-transparent hover:bg-bg-hover hover:text-text-primary"
-              onClick={reset}
-              onKeyDown={activateOnKeyboard}
-              role="button"
-              tabIndex={0}
-              title={t(lang, 'settingsReset')}
-            >
-              <RotateCcw size={14} />
-              <span>{t(lang, 'settingsReset')}</span>
-            </div>
+            <SettingsResetButton onClick={reset} />
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-4 bg-bg-editor">
-            {(Object.keys(groupedFields) as (keyof AppSettings)[]).map((cat) => {
+          <div className="frost-content flex-1 overflow-y-auto px-6 py-4">
+            {activeCategory === 'ai' && !searchQuery.trim() && (
+              <nav
+                className="flex items-center gap-1.5 pb-3 text-xs text-text-secondary"
+                aria-label={translate('settingsBreadcrumb', lang)}
+              >
+                <span>{translate('settingsTitle', lang)}</span>
+                <ChevronRight size={12} aria-hidden="true" />
+                <button
+                  type="button"
+                  className={aiSection === 'main' ? 'text-text-primary' : 'hover:text-text-primary'}
+                  onClick={() => setAiSection('main')}
+                >
+                  {translate(CATEGORY_LABEL_KEY.ai, lang)}
+                </button>
+                {aiSectionLabel && (
+                  <>
+                    <ChevronRight size={12} aria-hidden="true" />
+                    <span className="text-text-primary">{aiSectionLabel}</span>
+                  </>
+                )}
+              </nav>
+            )}
+            {activeCategory === 'ai' && !searchQuery.trim() && aiSection === 'plugins' ? (
+              <AiPluginSettings settings={settings} update={updateAiBoolean} />
+            ) : activeCategory === 'ai' && !searchQuery.trim() && aiSection === 'mcp' ? (
+              <AiMcpSettings
+                port={settings.ai.mcpServerPort}
+                // 端口改动经 AI store: 写入设置, 并在服务已监听时立即切到新端口
+                onPortChange={(value) => void useAiChatStore.getState().changeServerPort(value)}
+              />
+            ) : (Object.keys(groupedFields) as (keyof AppSettings)[]).map((cat) => {
               const fields = groupedFields[cat]!;
               // 搜索模式下显示分类标题; 非搜索模式只显示当前分类
               if (!searchQuery.trim() && cat !== activeCategory) return null;
               return (
                 <div key={cat} className="mb-6">
                   {searchQuery.trim() && (
-                    <div className="text-xs font-semibold uppercase tracking-[0.5px] text-text-secondary pb-2 mb-3 border-b border-border">
-                      {t(lang, CATEGORY_LABEL_KEY[cat])}
+                    <div className="section-heading pb-2 mb-3 border-b border-border">
+                      {translate(CATEGORY_LABEL_KEY[cat], lang)}
                     </div>
                   )}
                   {fields.map((def) => (
                     <Fragment key={`${def.category}-${def.field}`}>
                       <div className="flex items-start justify-between gap-6 py-2.5 border-b border-border last:border-b-0">
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm text-text-primary mb-0.5">{t(lang, def.labelKey)}</div>
-                          <div className="text-xs text-text-secondary leading-relaxed">{t(lang, def.descKey)}</div>
+                          <div className="text-sm text-text-primary mb-0.5">{translate(def.labelKey, lang)}</div>
+                          <div className="text-xs text-text-secondary leading-relaxed">{translate(def.descKey, lang)}</div>
                         </div>
                         <div className="flex-shrink-0 min-w-[200px] flex items-center justify-end">{renderControl(def)}</div>
                       </div>
-                      {/* OrcaRouter 重点提示: 命名空间模型名 + 推广链接获取 API Key + 免费模型入口 */}
-                      {cat === 'ai' && def.field === 'apiKey' && settings.ai.adapter === 'orcarouter' && (
-                        <div className="my-2 px-3 py-2 rounded border border-accent/25 bg-accent/5 space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <span className="flex-1 min-w-0 text-xs text-text-secondary leading-relaxed">
-                              {t(lang, 'settingAiOrcaHint')}
-                            </span>
-                            <button
-                              className="flex-shrink-0 px-2 py-1 rounded bg-accent text-accent-foreground text-xs flex items-center gap-1"
-                              onClick={() => void openUrl(ORCAROUTER_REFERRAL_URL)}
-                            >
-                              <ExternalLink size={11} />
-                              {t(lang, 'settingAiOrcaGetKey')}
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs text-text-secondary leading-relaxed">
-                            <Sparkles size={11} className="flex-shrink-0 text-accent" />
-                            <span className="flex-shrink-0">{t(lang, 'settingAiOrcaFreeModels')}</span>
-                            <button
-                              className="text-accent hover:text-accent-hover hover:underline truncate text-left"
-                              onClick={() => void openUrl(ORCAROUTER_OFFERS_URL)}
-                              title={ORCAROUTER_OFFERS_URL}
-                            >
-                              {ORCAROUTER_OFFERS_URL}
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                      {cat === 'ai' && def.field === 'apiKey' && settings.ai.adapter === 'orcarouter' && <OrcaRouterPromo />}
                     </Fragment>
                   ))}
+                  {cat === 'ai' && !searchQuery.trim() && aiSection === 'main' && (
+                    <AiSettingsSections
+                      settings={settings}
+                      update={updateAiBoolean}
+                      onOpenPlugins={() => setAiSection('plugins')}
+                      onOpenMcp={() => setAiSection('mcp')}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -521,14 +367,14 @@ export function SettingsModal() {
               <form action={resetCategoryAction} className="py-4">
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-transparent text-text-secondary border-none rounded cursor-pointer text-sm text-center transition-colors hover:bg-bg-hover hover:text-text-primary inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-default"
+                  className="px-3 py-1.5 bg-transparent text-text-secondary border-none rounded cursor-pointer text-sm text-center transition-colors hover:bg-bg-hover hover:text-text-primary inline-flex items-center gap-1.5 disabled:opacity-disabled disabled:cursor-default"
                   disabled={isResettingCategory}
                 >
                   <RotateCcw size={12} />
-                  <span>{t(lang, 'settingsResetCategory')}</span>
+                  <span>{translate('settingsResetCategory', lang)}</span>
                 </button>
                 {resetCategoryState.error && (
-                  <div className="text-xs text-red-400 break-all">{resetCategoryState.error}</div>
+                  <div className="text-xs text-text-danger break-all">{resetCategoryState.error}</div>
                 )}
               </form>
             )}
@@ -536,23 +382,23 @@ export function SettingsModal() {
         </div>
 
         {/* 底部 — 完成按钮 */}
-        <div className="flex items-center px-4 py-2.5 border-t border-border bg-bg-panel-header flex-shrink-0">
+        <div className="flex items-center px-4 py-2.5 border-t border-border dialog-chrome flex-shrink-0">
           <div className="flex-1" />
           <form action={saveAction}>
             <button
               type="submit"
-              className="bg-bg-button text-text-inverse border-none py-1.5 px-4 text-sm font-ui cursor-pointer rounded inline-flex items-center gap-1.5 transition-colors hover:bg-bg-button-hover disabled:opacity-50 disabled:cursor-default"
+              className="bg-bg-button text-text-inverse border-none py-1.5 px-4 text-sm font-ui cursor-pointer rounded inline-flex items-center gap-1.5 transition-colors hover:bg-bg-button-hover disabled:opacity-disabled disabled:cursor-default"
               disabled={isSaving}
             >
               <Check size={14} />
-              <span>{t(lang, 'settingsDone')}</span>
+              <span>{translate('settingsDone', lang)}</span>
             </button>
             {saveState.error && (
-              <div className="text-xs text-red-400 break-all">{saveState.error}</div>
+              <div className="text-xs text-text-danger break-all">{saveState.error}</div>
             )}
           </form>
         </div>
-      </div>
+      </DialogSurface>
       <ThemeEditor
         isOpen={themeEditorOpen}
         onClose={() => setThemeEditorOpen(false)}
@@ -590,50 +436,15 @@ export function SettingsModal() {
         }
       />
       <BackupModal isOpen={backupModalOpen} onClose={() => setBackupModalOpen(false)} />
-      {/* 更新通道切换确认 — select 为受控值, 取消即自动回原值 */}
-      {pendingChannel && (
-        <div
-          className="fixed inset-0 bg-bg-overlay z-[9500] flex items-center justify-center animate-[settings-fade-in_0.15s_ease-out]"
-          onClick={(e) => {
-            // 阻止冒泡到设置弹窗遮罩 (避免整个设置弹窗被关闭)
-            e.stopPropagation();
-            setPendingChannel(null);
-          }}
-          onKeyDown={activateOnKeyboard}
-          role="button"
-          tabIndex={0}
-        >
-          <div
-            className="w-[360px] max-w-[90vw] bg-bg-sidebar border border-border rounded-lg shadow-modal p-5 flex flex-col gap-3 animate-[settings-slide-in_0.2s_ease-out]"
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="text-sm font-semibold text-text-bright">
-              {t(lang, 'updateChannelConfirmTitle')}
-            </div>
-            <div className="text-xs text-text-secondary leading-relaxed">
-              {t(lang, pendingChannel === 'beta' ? 'updateChannelToBetaMsg' : 'updateChannelToStableMsg')}
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                className="bg-transparent text-text-primary border border-border px-2.5 py-1 text-xs cursor-pointer rounded transition-all hover:bg-bg-hover hover:border-accent hover:text-text-bright"
-                onClick={() => setPendingChannel(null)}
-              >
-                {t(lang, 'updateCancel')}
-              </button>
-              <button
-                className="px-3 py-1 bg-bg-button text-text-inverse border-none rounded cursor-pointer text-xs transition-colors hover:bg-bg-button-hover"
-                onClick={() => {
-                  setUpdateChannel(pendingChannel);
-                  setPendingChannel(null);
-                }}
-              >
-                {t(lang, 'updateConfirm')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      <UpdateChannelDialog
+        pendingChannel={pendingChannel}
+        setPendingChannel={setPendingChannel}
+        setUpdateChannel={setUpdateChannel}
+      />
+
+    </DialogOverlay>
   );
 }
+
+/// 懒加载入口 — 见 `components/lazy/lazyComponents.ts` (全仓唯一 React.lazy 清单)。
+export default SettingsModal;

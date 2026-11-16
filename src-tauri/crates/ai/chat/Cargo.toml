@@ -1,9 +1,13 @@
 [package]
-name = "chat"
+name = "lissio-chat"
 description = "Lissio AI 对话编排 — 多轮工具调用循环 / 流式事件分发 / 任务取消"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "chat"
 
 [lints]
 workspace = true
@@ -11,7 +15,6 @@ workspace = true
 [dependencies]
 llm = { workspace = true }
 chat-session = { workspace = true }
-mcp-client = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
 parking_lot = { workspace = true }
@@ -20,7 +23,6 @@ serde_json = { workspace = true }
 tokio = { workspace = true }
 log = { workspace = true }
 error = { workspace = true }
-data_model = { workspace = true }
 
 [dev-dependencies]
 

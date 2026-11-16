@@ -2,16 +2,15 @@ import { openNodePropertiesPanel } from '../utils/revealDataTab';
 import type { Node, Edge } from '@xyflow/react';
 import type {
   EncodeBlock,
-  FrameDecoderConfig,
   ProtocolConfig,
   ProtocolSchema,
   SimulationConfig,
   WidgetConfig,
 } from '../../types';
 import type { ProtocolNodeData } from '../../store/appStoreHelpers';
-import type { AcquisitionNodeData } from './acquisitionNodes';
-import { updateAcquisitionNode } from './acquisitionNodes';
+import { simulationConfig, updateAcquisitionNode, withSimulation, type AcquisitionNodeData } from './acquisitionNodes';
 import { useAppStore } from '../../store/appStore';
+import { deviceTreeCanvasEdges, deviceTreeCanvasNodes } from './deviceTreeModel';
 
 export const defaultSimulation = (): SimulationConfig => ({
   signal: { waveform: 'sine', frequency: 1, amplitude: 1, offset: 0 },
@@ -19,13 +18,15 @@ export const defaultSimulation = (): SimulationConfig => ({
 });
 
 export function downstreamParsers(device: Node, nodes: Node[], edges: Edge[]): Node[] {
+  const allNodes = [...nodes, ...deviceTreeCanvasNodes(nodes)];
+  const allEdges = [...edges, ...deviceTreeCanvasEdges(nodes)];
   const visited = new Set([device.id]);
   const queue = [device.id];
   const parsers: Node[] = [];
   while (queue.length) {
     const source = queue.shift();
-    for (const edge of edges.filter(e => e.source === source)) {
-      const target = nodes.find(n => n.id === edge.target && n.data.tabId === device.data.tabId);
+    for (const edge of allEdges.filter(e => e.source === source && ['rx', 'out', 'raw'].includes(e.sourceHandle ?? '') && e.targetHandle === 'in')) {
+      const target = allNodes.find(n => n.id === edge.target && n.data.tabId === device.data.tabId && n.data.enabled !== false);
       if (!target || visited.has(target.id)) continue;
       visited.add(target.id);
       if (target.type === 'protocol' || (target.data.widget as { kind?: string } | undefined)?.kind === 'FrameDecoder') parsers.push(target);
@@ -37,7 +38,7 @@ export function downstreamParsers(device: Node, nodes: Node[], edges: Edge[]): N
 
 export function resolveSimulation(device: Node, nodes: Node[], edges: Edge[]): SimulationConfig | null {
   const data = device.data as AcquisitionNodeData;
-  const simulation = data.spec.simulation;
+  const simulation = simulationConfig(data.node);
   if (!simulation) return null;
   if (data.ports?.some(p => p.domain === 'points')) return simulation;
   const parsers = downstreamParsers(device, nodes, edges);
@@ -51,7 +52,7 @@ export function resolveSimulation(device: Node, nodes: Node[], edges: Edge[]): S
   if (!encoding) throw new Error('请选择生成格式；自定义解析器需要配置编码规则。');
   const schema = (encoding as { schema?: ProtocolSchema }).schema;
   if (schema?.preset === 'custom' && !schema.encode?.length) throw new Error('自定义解析器缺少编码规则。');
-  return { ...simulation, encoding };
+  return { ...simulation, encoding: encoding as SimulationConfig['encoding'] };
 }
 
 function parserEncoding(parser: Node): { protocol: ProtocolConfig; schema: ProtocolSchema } | null {
@@ -61,7 +62,7 @@ function parserEncoding(parser: Node): { protocol: ProtocolConfig; schema: Proto
   }
   const widget = parser.data.widget as WidgetConfig | undefined;
   if (widget?.kind !== 'FrameDecoder') return null;
-  const config = widget.params as FrameDecoderConfig;
+  const config = widget.params;
   const encode: EncodeBlock[] = [];
   for (const block of config.blocks) {
     if ((block.type === 'header' || block.type === 'tail') && block.matchId == null) {
@@ -76,7 +77,7 @@ function parserEncoding(parser: Node): { protocol: ProtocolConfig; schema: Proto
   }
   return {
     protocol: { kind: 'RawData' },
-    schema: { preset: 'custom', legacyConfig: null, decode: config.blocks, encode },
+    schema: { preset: 'custom', presetConfig: null, decode: config.blocks, encode },
   };
 }
 
@@ -86,8 +87,13 @@ export function applyTestAttribute(nodeId?: string): boolean {
   const selected = state.rfNodes.filter(n => n.selected && n.data.tabId === state.activeControlTabId);
   const node = nodeId ? state.rfNodes.find(n => n.id === nodeId) : selected.length === 1 ? selected[0] : undefined;
   if (node?.type !== 'acquisition') return false;
-  const { spec } = node.data as AcquisitionNodeData;
-  if (!spec.simulation) updateAcquisitionNode(node.id, { ...spec, simulation: defaultSimulation() });
+  const { node: device } = node.data as AcquisitionNodeData;
+  if (!simulationConfig(device)) {
+    const existing = device.children.find(child => child.driver === 'simulation');
+    const updated = existing ? { ...device, children: device.children.map(child => child.id === existing.id
+      ? { ...child, enabled: true } : child) } : withSimulation(device, defaultSimulation());
+    updateAcquisitionNode(node.id, updated);
+  }
   state.onNodesChange(state.rfNodes.map(n => ({ id: n.id, type: 'select', selected: n.id === node.id })));
   openNodePropertiesPanel();
   return true;

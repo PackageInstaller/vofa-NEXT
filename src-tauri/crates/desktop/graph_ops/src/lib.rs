@@ -29,12 +29,15 @@ pub use compile_queue::*;
 pub use derived::*;
 pub use inject::*;
 pub use source_graph::{
-    apply_connect_edge, apply_disconnect_edge, ConnectedEdge, DisconnectedEdge, GraphSourceEvent,
-    GRAPH_SOURCE_EVENT,
+    ConnectedEdge, DisconnectedEdge, GRAPH_SOURCE_EVENT, GraphSourceEvent, apply_connect_edge,
+    apply_disconnect_edge,
 };
 
 /// `graph:compile` 事件名 — re-export 自 `events`, 方便调用方统一取用
 pub use events::GRAPH_COMPILE_EVENT;
+mod device_tree;
+#[cfg(test)]
+mod device_tree_tests;
 mod document;
 pub use document::apply_document;
 mod simulation;

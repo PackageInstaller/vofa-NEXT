@@ -15,8 +15,8 @@ import { CompileDot } from './CompileStatusIndicator';
 import { useContextMenu, showContextMenu } from '../../lib/hooks/useContextMenu';
 import { transitionStore } from '../../lib/utils/transitionStore';
 import { activateOnKeyboard } from '../../lib/utils/a11y';
-import { dockDrag } from '../../lib/dockDrag';
-import { t } from '../../i18n';
+import { dockDrag } from '../../lib/interaction/dockDrag';
+import { translate } from '../../i18n';
 
 /// 通用 Dock 卡片框架 — 标题栏 (Tab 条 + 滑动指示器) + 内容区 + 吸附投放层
 /// 交互 (指针事件驱动, 替代 HTML5 DnD — WKWebView 下 HTML5 拖拽不可靠):
@@ -27,6 +27,7 @@ export const DockCardFrame = memo(function DockCardFrame({ cardId }: { cardId: s
   const lang = useAppStore((s) => s.lang);
   const card = useDockStore((s) => s.cards[cardId]);
   const addControlTab = useAppStore((s) => s.addControlTab);
+  const addDefaultCanvas = useAppStore((s) => s.addDefaultCanvas);
   const removeControlTab = useAppStore((s) => s.removeControlTab);
   const renameControlTab = useAppStore((s) => s.renameControlTab);
   const removeDataTab = useAppStore((s) => s.removeDataTab);
@@ -107,9 +108,9 @@ export const DockCardFrame = memo(function DockCardFrame({ cardId }: { cardId: s
       if (st.closeHintShown) return;
       st.markCloseHintShown();
       notify.info(
-        t(lang, 'closeHintTitle'),
-        t(lang, 'closeHintMessage').replace('{{name}}', tab.name),
-        { actions: [{ label: t(lang, 'closeHintGotIt'), run: () => { return undefined; } }] }
+        translate('closeHintTitle', lang),
+        translate('closeHintMessage', lang).replace('{{name}}', tab.name),
+        { actions: [{ label: translate('closeHintGotIt', lang), run: () => { return undefined; } }] }
       );
     },
     [lang]
@@ -117,7 +118,10 @@ export const DockCardFrame = memo(function DockCardFrame({ cardId }: { cardId: s
 
   const tabBarContextMenu = useContextMenu(
     kind === 'control'
-      ? [{ id: 'new-tab', label: t(lang, 'newTab'), icon: <Plus />, onClick: () => addControlTab() }]
+      ? [
+        { id: 'new-tab', label: translate('newTab', lang), icon: <Plus />, onClick: () => addControlTab() },
+        { id: 'default-canvas', label: translate('addDefaultCanvas', lang), icon: <Plus />, onClick: () => { void addDefaultCanvas(); } },
+      ]
       : []
   );
 
@@ -128,13 +132,14 @@ export const DockCardFrame = memo(function DockCardFrame({ cardId }: { cardId: s
         const canCloseTab = allControlTabs.length > 1;
         const otherTabs = allControlTabs.filter((tab) => tab.id !== tabId);
         return [
-          { id: 'rename', label: t(lang, 'contextMenuRename'), icon: <Type />, onClick: () => handleStartRename(tabId, currentName) },
-          { id: 'duplicate', label: t(lang, 'contextMenuDuplicate'), icon: <Copy />, onClick: () => addControlTab(currentName) },
+          { id: 'default-canvas', label: translate('addDefaultCanvas', lang), icon: <Plus />, onClick: () => { void addDefaultCanvas(); } },
+          { id: 'rename', label: translate('contextMenuRename', lang), icon: <Type />, onClick: () => handleStartRename(tabId, currentName) },
+          { id: 'duplicate', label: translate('contextMenuDuplicate', lang), icon: <Copy />, onClick: () => addControlTab(currentName) },
           { kind: 'separator' as const },
-          { id: 'close', label: t(lang, 'contextMenuCloseTab'), icon: <Trash2 />, disabled: !canCloseTab, onClick: () => removeControlTab(tabId) },
+          { id: 'close', label: translate('contextMenuCloseTab', lang), icon: <Trash2 />, disabled: !canCloseTab, onClick: () => removeControlTab(tabId) },
           {
             id: 'close-others',
-            label: t(lang, 'contextMenuCloseOtherTabs'),
+            label: translate('contextMenuCloseOtherTabs', lang),
             icon: <X />,
             disabled: otherTabs.length === 0,
             onClick: () => otherTabs.forEach((tab) => removeControlTab(tab.id)),
@@ -146,17 +151,17 @@ export const DockCardFrame = memo(function DockCardFrame({ cardId }: { cardId: s
       if (!tab) return [];
       const otherClosable = allDataTabs.filter((tb) => tb.id !== tabId && tb.closable);
       return [
-        { id: 'close', label: t(lang, 'contextMenuCloseTab'), icon: <Trash2 size={14} />, disabled: !tab.closable, onClick: () => removeDataTab(tabId) },
+        { id: 'close', label: translate('contextMenuCloseTab', lang), icon: <Trash2 size={14} />, disabled: !tab.closable, onClick: () => removeDataTab(tabId) },
         {
           id: 'close-others',
-          label: t(lang, 'contextMenuCloseOtherTabs'),
+          label: translate('contextMenuCloseOtherTabs', lang),
           icon: <X size={14} />,
           disabled: otherClosable.length === 0,
           onClick: () => otherClosable.forEach((tb) => removeDataTab(tb.id)),
         },
       ];
     },
-    [kind, lang, addControlTab, removeControlTab, removeDataTab, handleStartRename]
+    [kind, lang, addControlTab, addDefaultCanvas, removeControlTab, removeDataTab, handleStartRename]
   );
 
   const closable = (tabId: string) =>
@@ -166,7 +171,7 @@ export const DockCardFrame = memo(function DockCardFrame({ cardId }: { cardId: s
 
   return (
     <div
-      className="module-card dock-card-acrylic relative flex flex-col h-full w-full"
+      className="module-card motion-surface dock-card-acrylic relative flex flex-col h-full w-full"
       onMouseDown={() => setFocusedCard(cardId)}
       role="presentation"
       data-dock-zone="card-edge"
@@ -177,7 +182,7 @@ export const DockCardFrame = memo(function DockCardFrame({ cardId }: { cardId: s
       <div
         ref={tabBarRef}
         data-tour={kind === 'data' ? 'data-tabs' : undefined}
-        className={`relative flex items-center gap-1 bg-bg-panel-header border-b border-border-subtle shrink-0 px-2 py-1 overflow-x-auto transition duration-150 select-none ${
+        className={`relative flex items-center gap-1 bg-bg-panel-header border-b border-border-subtle shrink-0 px-2 py-1 overflow-x-auto transition select-none ${
           mergeHover
             ? 'shadow-[inset_0_0_0_1.5px_var(--color-accent)] bg-accent/10'
             : mergeActive
@@ -190,14 +195,14 @@ export const DockCardFrame = memo(function DockCardFrame({ cardId }: { cardId: s
         data-dock-zone="merge"
         data-dock-card={cardId}
         data-dock-kind={kind}
-        title={t(lang, 'dragToRearrange')}
+        title={translate('dragToRearrange', lang)}
       >
         <SlidingPill pill={tabPill} />
         {tabs.map((tab) => (
           <div
             key={tab.id}
             data-tab-key={tab.id}
-            className={`relative px-2.5 h-7 text-xs cursor-pointer rounded-sm flex items-center gap-1.5 shrink-0 min-w-0 max-w-[180px] overflow-hidden transition-colors duration-150 select-none ${
+            className={`relative px-2.5 h-7 text-xs cursor-pointer rounded-sm flex items-center gap-1.5 shrink-0 min-w-0 max-w-[180px] overflow-hidden transition-colors select-none ${
               tab.id === activeTabId
                 ? 'text-text-bright'
                 : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary active:bg-accent-active'
@@ -259,7 +264,7 @@ export const DockCardFrame = memo(function DockCardFrame({ cardId }: { cardId: s
           <button
             className="w-6 h-7 flex items-center justify-center rounded text-text-secondary hover:bg-bg-hover hover:text-text-primary active:bg-accent-active transition-colors cursor-pointer ml-1 shrink-0"
             onClick={() => addControlTab()}
-            title={t(lang, 'newTab')}
+            title={translate('newTab', lang)}
           >
             <Plus size={14} />
           </button>

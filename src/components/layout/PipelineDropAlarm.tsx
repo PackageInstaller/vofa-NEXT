@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { notify } from '../../lib/tauri/notifications';
-import { t } from '../../i18n';
+import { translate } from '../../i18n';
 import { useAppStore } from '../../store/appStore';
 import { DroppedInfoPopover } from '../common/DroppedInfoPopover';
 import { activateOnKeyboard } from '../../lib/utils/a11y';
@@ -31,8 +31,8 @@ export function PipelineDropAlarm() {
       if (now - lastAlarmRef.current > ALARM_THROTTLE_MS) {
         lastAlarmRef.current = now;
         notify.warn(
-          t(lang, 'notifDataDroppedTitle'),
-          t(lang, 'notifDataDroppedBody').replace('{{count}}', String(rxDroppedWindow)),
+          translate('notifDataDroppedTitle', lang),
+          translate('notifDataDroppedBody', lang).replace('{{count}}', String(rxDroppedWindow)),
           { source: 'pipeline-drop' }
         );
       }
@@ -46,13 +46,13 @@ export function PipelineDropAlarm() {
     <>
       <div
         className="flex items-center gap-1.5 px-1.5 cursor-pointer hover:bg-bg-hover rounded"
-        title={t(lang, 'statusDropped')}
+        title={translate('statusDropped', lang)}
         onClick={() => setInfoOpen(true)}
         onKeyDown={activateOnKeyboard}
         role="button"
         tabIndex={0}
       >
-        <span className="w-2 h-2 rounded-full bg-red animate-pulse inline-block" />
+        <span className="w-2 h-2 rounded-full bg-red motion-pulse inline-block" />
         <span className="text-red font-mono text-[10px]">
           {rxDroppedWindow}
         </span>

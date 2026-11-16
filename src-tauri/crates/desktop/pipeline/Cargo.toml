@@ -1,14 +1,19 @@
 [package]
-name = "pipeline"
+name = "lissio-pipeline"
 description = "Lissio 数据平面 (字节路由 + 数值平面评估 + 每源数据缓冲 + 解析引擎状态) — 两平面节点图重构核心"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "pipeline"
 
 [lints]
 workspace = true
 
 [dependencies]
+error = { workspace = true }
 points = { workspace = true }
 acquisition = { workspace = true }
 data_model = { workspace = true }
@@ -35,22 +40,24 @@ protocol_can_bridge = { workspace = true }
 logic_decoder = { workspace = true }
 schema = { workspace = true }
 schema_types = { workspace = true }
-transport = { workspace = true }
 flow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 log = { workspace = true }
 parking_lot = { workspace = true }
-tauri = { workspace = true }
 # 数据平面读任务调前端事件契约 (events.rs 迁出后从 events 取)
 events = { workspace = true }
 
 [dev-dependencies]
+transport = { workspace = true }
 # pipeline/{frame_dispatch, reconcile} 的 #[cfg(test)] 模块用 AppState 构造测试
 app = { workspace = true }
 graph_testkit = { workspace = true }
 criterion = { workspace = true }
+# loopback_direction_tests 自定义 TransportBackend 需要
+async-trait = { workspace = true }
+device_tree = { workspace = true }
 
 [[bench]]
 name = "eval_bench"
@@ -66,5 +73,5 @@ harness = false
 
 [package.metadata.lissio]
 domain = "desktop"
-layer = 5
+layer = 2
 responsibility = "Lissio 数据平面 (字节路由 + 数值平面评估 + 每源数据缓冲 + 解析引擎状态) — 两平面节点图重构核心"

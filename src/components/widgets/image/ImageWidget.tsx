@@ -44,7 +44,7 @@ export const ImageViewer = memo(function ImageViewer({ widget, full = false }: I
               <canvas width={width} height={height} />
             ) : (
               <div className="flex flex-col gap-1 items-center">
-                <ImageIcon size={32} className="opacity-40" />
+                <ImageIcon size={32} className="opacity-subtle" />
                 {infoBlock}
               </div>
             )}
@@ -52,7 +52,7 @@ export const ImageViewer = memo(function ImageViewer({ widget, full = false }: I
         </div>
         {/* 侧栏: 图像信息 */}
         <div className="w-[200px] flex-shrink-0 border-l border-border bg-bg-sidebar overflow-y-auto flex flex-col gap-2 p-2.5">
-          <div className="text-[10px] text-text-secondary uppercase tracking-wide font-semibold px-1">Image</div>
+          <div className="section-heading section-heading--micro px-1">Image</div>
           <div className="flex flex-col gap-1 bg-bg-input border border-border rounded-sm px-2 py-1.5">
             <div className="flex justify-between text-xs">
               <span className="text-text-secondary">Width</span>
@@ -82,7 +82,7 @@ export const ImageViewer = memo(function ImageViewer({ widget, full = false }: I
         <canvas width={width} height={height} />
       ) : (
         <div className="flex flex-col gap-1 items-center">
-          <ImageIcon size={24} className="opacity-40" />
+          <ImageIcon size={24} className="opacity-subtle" />
           <span>
             {width}×{height} {format}
           </span>

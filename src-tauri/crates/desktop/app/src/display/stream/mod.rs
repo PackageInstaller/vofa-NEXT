@@ -1,9 +1,10 @@
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use crate::AppState;
 use bus::{RuntimeHealth, TopicKey};
-use data_model::Result;
+use error::Result;
 use evaluator::filtered_sources::{
     FilteredCanStreamSource, FilteredDecodedStreamSource, FilteredLogicStreamSource,
     FilteredRawDataSource,
@@ -13,11 +14,11 @@ use stream::{
     AdaptiveRate, CanStreamSource, DecodedStreamSource, LogicStreamSource, RawDataSource,
     StreamSource, WaveformSource,
 };
-use tauri::ipc::{Channel, InvokeResponseBody};
-use tauri::State;
 
 use super::protocol::{DisplayEvent, DisplayRequest, RawDataOrigin, SubscriptionInfo};
 use super::snapshot::spawn_snapshot;
+use super::target;
+use stream::sink::{StreamPayload, StreamSink};
 
 mod binary;
 mod envelope_stream;
@@ -45,12 +46,12 @@ fn direction(value: &str) -> DirectionFilter {
     }
 }
 
-pub fn send_json(channel: &Channel<InvokeResponseBody>, event: &DisplayEvent) -> bool {
+pub fn send_json(sink: &dyn StreamSink, event: &DisplayEvent) -> bool {
     let Ok(json) = serde_json::to_string(event) else {
         log::error!("显示事件序列化失败");
         return false;
     };
-    channel.send(InvokeResponseBody::Json(json)).is_ok()
+    sink.send(StreamPayload::Json(json))
 }
 
 async fn can_bitrate(state: &AppState, node_id: &str, override_bps: Option<u32>) -> u32 {
@@ -58,7 +59,8 @@ async fn can_bitrate(state: &AppState, node_id: &str, override_bps: Option<u32>)
         return value;
     }
     let manager = &state.transport;
-    match manager.config(node_id) {
+    let node = data_model::device_tree::NodeId::new(node_id).ok();
+    match node.and_then(|node| manager.config(&node)) {
         Some(data_model::TransportConfig::Slcan(config)) => config.can_bitrate.bps(),
         Some(data_model::TransportConfig::CandleLight(config)) => config.can_bitrate.bps(),
         _ => 500_000,
@@ -66,7 +68,7 @@ async fn can_bitrate(state: &AppState, node_id: &str, override_bps: Option<u32>)
 }
 
 /// JSON 事件编码器 — 低频流 (原始数据/CAN/逻辑/解码事件) 沿用 JSON 联合事件
-fn json_event<E, F>(map: F) -> impl Fn(E) -> InvokeResponseBody + Send + 'static
+fn json_event<E, F>(map: F) -> impl Fn(E) -> StreamPayload + Send + 'static
 where
     E: serde::Serialize,
     F: Fn(E) -> DisplayEvent + Send + 'static,
@@ -74,55 +76,50 @@ where
     move |event| {
         let Ok(json) = serde_json::to_string(&map(event)) else {
             log::error!("显示事件序列化失败");
-            return InvokeResponseBody::Json("{}".into());
+            return StreamPayload::Json("{}".into());
         };
-        InvokeResponseBody::Json(json)
+        StreamPayload::Json(json)
     }
 }
 
 fn spawn_stream<S, F>(
     state: &AppState,
     mut source: S,
-    on_event: Channel<InvokeResponseBody>,
+    on_event: Arc<dyn StreamSink>,
     interval: Duration,
     min_batch: usize,
     name: &'static str,
     encode: F,
 ) where
     S: StreamSource,
-    F: Fn(S::Batch) -> InvokeResponseBody + Send + 'static,
+    F: Fn(S::Batch) -> StreamPayload + Send + 'static,
 {
     let channel_id = on_event.id();
-    let mut cancel = subscription::register_cancel(&state.subscriptions, channel_id);
+    let cancel = subscription::register_cancel(&state.subscriptions, channel_id);
     let subscriptions = state.subscriptions.clone();
-    let mut rate = display_rate(
+    let rate = display_rate(
         interval,
         state.data_plane.eval.bus.limits().preview_fps_limit,
     );
     tokio::spawn(async move {
         let seq = AtomicU64::new(0);
-        loop {
-            tokio::select! {
-                _ = &mut cancel => break,
-                () = tokio::time::sleep(rate.current()) => {
-                    let backlog = source.backlog();
-                    // 显示点数预算由调用方传入；即使未来某个源给出超过自身硬上限的
-                    // 预算，也不能让 usize::clamp(min > max) 使订阅任务 panic。
-                    let drain_size = stream::bounded_drain_size(
-                        backlog,
-                        min_batch,
-                        S::MAX_DRAIN,
-                    );
-                    let Some(mut batch) = source.drain(drain_size) else {
-                        rate.on_idle();
-                        continue;
-                    };
-                    S::set_seq(&mut batch, seq.fetch_add(1, Ordering::Relaxed));
-                    if on_event.send(encode(batch)).is_err() { break; }
-                    rate.on_send();
-                }
-            }
-        }
+        // 分片/自适应推送循环由 L2 `stream` 提供, 这里只提供取批与编码闭包
+        stream::adaptive_stream_loop(
+            name,
+            on_event,
+            rate,
+            move || {
+                let backlog = source.backlog();
+                // 显示点数预算由调用方传入；即使未来某个源给出超过自身硬上限的
+                // 预算，也不能让 usize::clamp(min > max) 使订阅任务 panic。
+                let drain_size = stream::bounded_drain_size(backlog, min_batch, S::MAX_DRAIN);
+                let mut batch = source.drain(drain_size)?;
+                S::set_seq(&mut batch, seq.fetch_add(1, Ordering::Relaxed));
+                Some(encode(batch))
+            },
+            cancel,
+        )
+        .await;
         subscription::remove_subscription(&subscriptions, channel_id);
         log::debug!("{name}订阅已结束: {channel_id}");
     });
@@ -132,7 +129,7 @@ async fn spawn_can_load(
     state: &AppState,
     node_id: &str,
     bitrate_bps: Option<u32>,
-    on_event: Channel<InvokeResponseBody>,
+    on_event: Arc<dyn StreamSink>,
     interval: Duration,
 ) {
     let bitrate = can_bitrate(state, node_id, bitrate_bps).await;
@@ -151,7 +148,7 @@ async fn spawn_can_load(
                         value.sample_history(bitrate, data_model::now_us());
                         value.snapshot(bitrate)
                     };
-                    if !send_json(&on_event, &DisplayEvent::CanLoad(snapshot)) { break; }
+                    if !send_json(on_event.as_ref(), &DisplayEvent::CanLoad(snapshot)) { break; }
                 }
             }
         }
@@ -159,23 +156,47 @@ async fn spawn_can_load(
     });
 }
 
-/// 统一显示订阅。每个逻辑订阅只使用一个 Tauri Channel。
+/// 统一显示订阅。每个逻辑订阅只使用一个 [`StreamSink`] 实例。
+///
+/// 面板形态 (`DisplayRequest::Panel`) 在此**前置展开**: 面板身份 + 寻址经
+/// [`target::push_request`] 转成具体投递请求后递归重派发, 展开后的请求不可能
+/// 再是 `Panel`, 因此递归深度恒为 1。
 pub async fn subscribe_data(
-    state: State<'_, AppState>,
+    state: &AppState,
     request: DisplayRequest,
-    on_event: Channel<InvokeResponseBody>,
+    on_event: Arc<dyn StreamSink>,
     interval_ms: Option<u64>,
     max_items: Option<usize>,
 ) -> Result<SubscriptionInfo> {
     let interval = Duration::from_millis(interval_ms.unwrap_or(33));
+    // 面板展开后的递归重派发要沿原样参数下沉; 下面的 max_items 是归一化批上限
+    let raw_max_items = max_items;
     let max_items = max_items.unwrap_or(1_000);
     let channel_id = on_event.id();
     let mut mode = "json";
     match request {
+        // 面板 → 投递细节的唯一解析点 (前端只说「哪个面板 / 寻址到哪」);
+        // 展开后递归重派发 — 递归调用需装箱, 否则本 future 类型无限大。
+        DisplayRequest::Panel {
+            node_id,
+            port,
+            panel_kind,
+        } => {
+            let resolved =
+                target::push_request(panel_kind, &target::NodePortTarget::new(node_id, port))?;
+            return Box::pin(subscribe_data(
+                state,
+                resolved,
+                on_event,
+                interval_ms,
+                raw_max_items,
+            ))
+            .await;
+        }
         snapshot @ (DisplayRequest::GraphOutputs
         | DisplayRequest::CustomInputs
         | DisplayRequest::StringOutputs
-        | DisplayRequest::Spectrum) => spawn_snapshot(&state, snapshot, on_event, interval),
+        | DisplayRequest::Spectrum) => spawn_snapshot(state, snapshot, on_event, interval),
         DisplayRequest::PortSamples {
             source_node_id,
             source_handle,
@@ -185,7 +206,7 @@ pub async fn subscribe_data(
             let fps = u64::from(limits.preview_fps_limit.max(1));
             let minimum_ms = 1_000_u64.saturating_add(fps - 1) / fps;
             let _ = spawn_sample_stream(
-                &state,
+                state,
                 TopicKey::new(source_node_id, source_handle),
                 on_event,
                 interval.max(Duration::from_millis(minimum_ms)),
@@ -197,7 +218,7 @@ pub async fn subscribe_data(
             mode = "binary";
             let columns = usize::try_from(columns).unwrap_or(2048).clamp(16, 4096);
             spawn_envelope_stream(
-                &state,
+                state,
                 state.data_plane.buffer_for(&source),
                 columns,
                 on_event,
@@ -209,7 +230,7 @@ pub async fn subscribe_data(
             window_ms,
             derived,
         } => {
-            spawn_measurement_stream(&state, &source, window_ms, derived, on_event, interval);
+            spawn_measurement_stream(state, &source, window_ms, derived, on_event, interval);
         }
         DisplayRequest::Waveform {
             source,
@@ -231,14 +252,14 @@ pub async fn subscribe_data(
             };
             mode = "binary";
             spawn_stream(
-                &state,
+                state,
                 waveform_source,
                 on_event,
                 interval,
                 max_items,
                 "波形",
                 |batch| {
-                    InvokeResponseBody::Raw(super::waveform_binary::encode_waveform_window(&batch))
+                    StreamPayload::Binary(super::waveform_binary::encode_waveform_window(&batch))
                 },
             );
         }
@@ -256,13 +277,13 @@ pub async fn subscribe_data(
                             subscription_id: channel_id,
                             schema_version: BINARY_SCHEMA_VERSION,
                             mode,
-                        })
+                        });
                     }
                 },
             };
             if filter_direction.is_empty() && search.trim().is_empty() {
                 spawn_stream(
-                    &state,
+                    state,
                     RawDataSource::new(collector),
                     on_event,
                     interval,
@@ -272,7 +293,7 @@ pub async fn subscribe_data(
                 );
             } else {
                 spawn_stream(
-                    &state,
+                    state,
                     FilteredRawDataSource::new(
                         collector,
                         direction(&filter_direction),
@@ -287,17 +308,23 @@ pub async fn subscribe_data(
             }
         }
         DisplayRequest::CanFrames { filter } => match filter {
-            Some(filter) => spawn_stream(
-                &state,
-                FilteredCanStreamSource::new(state.can_buffer.clone(), filter),
-                on_event,
-                interval,
-                max_items,
-                "过滤 CAN",
-                json_event(DisplayEvent::CanFrames),
-            ),
+            Some(filter) => {
+                let source = FilteredCanStreamSource::try_new(state.can_buffer.clone(), filter)
+                    .map_err(|error| {
+                        error::AppError::Protocol(error::ProtocolError::Parse(error.to_string()))
+                    })?;
+                spawn_stream(
+                    state,
+                    source,
+                    on_event,
+                    interval,
+                    max_items,
+                    "过滤 CAN",
+                    json_event(DisplayEvent::CanFrames),
+                );
+            }
             None => spawn_stream(
-                &state,
+                state,
                 CanStreamSource::new(state.can_buffer.clone(), max_items),
                 on_event,
                 interval,
@@ -308,7 +335,7 @@ pub async fn subscribe_data(
         },
         DisplayRequest::LogicSamples { filter } => match filter {
             Some(filter) => spawn_stream(
-                &state,
+                state,
                 FilteredLogicStreamSource::new(state.logic_buffer.clone(), filter),
                 on_event,
                 interval,
@@ -317,7 +344,7 @@ pub async fn subscribe_data(
                 json_event(DisplayEvent::LogicSamples),
             ),
             None => spawn_stream(
-                &state,
+                state,
                 LogicStreamSource::new(state.logic_buffer.clone(), max_items),
                 on_event,
                 interval,
@@ -328,7 +355,7 @@ pub async fn subscribe_data(
         },
         DisplayRequest::DecodedEvents { filter } => match filter {
             Some(filter) => spawn_stream(
-                &state,
+                state,
                 FilteredDecodedStreamSource::new(state.decoded_buffer.clone(), filter),
                 on_event,
                 interval,
@@ -337,7 +364,7 @@ pub async fn subscribe_data(
                 json_event(DisplayEvent::DecodedEvents),
             ),
             None => spawn_stream(
-                &state,
+                state,
                 DecodedStreamSource::new(state.decoded_buffer.clone(), max_items),
                 on_event,
                 interval,
@@ -349,7 +376,7 @@ pub async fn subscribe_data(
         DisplayRequest::CanLoad {
             node_id,
             bitrate_bps,
-        } => spawn_can_load(&state, &node_id, bitrate_bps, on_event, interval).await,
+        } => spawn_can_load(state, &node_id, bitrate_bps, on_event, interval).await,
     }
     Ok(SubscriptionInfo {
         subscription_id: channel_id,
@@ -358,14 +385,14 @@ pub async fn subscribe_data(
     })
 }
 
-pub async fn unsubscribe_data(state: State<'_, AppState>, channel_id: u32) -> Result<()> {
+pub async fn unsubscribe_data(state: &AppState, channel_id: u32) -> Result<()> {
     subscription::cancel_subscription(&state.subscriptions, channel_id);
     Ok(())
 }
 
 /// 前端消费反馈。目前以运行时 Topic 保存控制状态。
 pub fn ack_data(
-    state: State<'_, AppState>,
+    state: &AppState,
     subscription_id: u32,
     sequence: u64,
     buffered_bytes: usize,
@@ -380,7 +407,7 @@ pub fn ack_data(
     Ok(())
 }
 
-pub fn get_data_health(state: State<'_, AppState>) -> Result<RuntimeHealth> {
+pub fn get_data_health(state: &AppState) -> Result<RuntimeHealth> {
     Ok(state.data_plane.eval.bus.health())
 }
 

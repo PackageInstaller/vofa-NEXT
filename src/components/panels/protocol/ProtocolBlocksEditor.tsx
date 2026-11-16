@@ -1,13 +1,14 @@
 //! 协议 schema 自定义块编辑器 — preset='custom' 时内嵌于 ProtocolConfigForm
 //! 支持协议侧有意义的块: header/length/id/field/bitfield/checksum/tail/csv
 //! (块编辑表单复用 FrameDecoder 的 BlockEditor; 本组件只维护列表增删/排序/展开)
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { nanoid } from 'nanoid';
-import { t, type Lang } from '../../../i18n';
+import { translate, type Lang } from '../../../i18n';
 import type { DecoderBlock } from '../../../types';
 import { BLOCK_TYPE_CONFIG, blockSummary } from '../../displays/decoder/frameDecoderShared';
 import { BlockEditor } from '../../displays/decoder/FrameDecoderBlockEditor';
+import { reflowSpring, useFlipReorder } from '../../../lib/motion';
 import { activateOnKeyboard } from '../../../lib/utils/a11y';
 
 /// 协议 schema 编辑器可添加的块类型
@@ -25,6 +26,14 @@ interface ProtocolBlocksEditorProps {
 
 export function ProtocolBlocksEditor({ blocks, onChange, lang }: ProtocolBlocksEditorProps) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // 触发条件只编码块的顺序。展开/收起改变的是高度而非槽位, 由块自身的尺寸过渡负责,
+  // 混进来会让 FLIP 与那个过渡争夺同一批像素。
+  useFlipReorder(listRef, blocks.map((b, i) => b.id ?? i).join('|'), {
+    keyAttribute: 'data-flip-key',
+    spring: reflowSpring,
+  });
 
   const toggleExpand = (idx: number) => {
     setExpandedIds((prev) => {
@@ -71,17 +80,21 @@ export function ProtocolBlocksEditor({ blocks, onChange, lang }: ProtocolBlocksE
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div ref={listRef} className="flex flex-col gap-1.5">
       {blocks.length === 0 && (
-        <div className="text-xs text-text-secondary opacity-60 italic py-2 text-center">
-          {t(lang, 'fdBlocksEmpty')}
+        <div className="text-xs text-text-secondary opacity-muted italic py-2 text-center">
+          {translate('fdBlocksEmpty', lang)}
         </div>
       )}
       {blocks.map((block, idx) => {
         const cfg = BLOCK_TYPE_CONFIG[block.type];
         const isExpanded = expandedIds.has(idx);
         return (
-          <div key={block.id ?? idx} className={`border rounded-sm ${cfg.blockClass}`}>
+          <div
+            key={block.id ?? idx}
+            data-flip-key={block.id ?? idx}
+            className={`border rounded-sm ${cfg.blockClass}`}
+          >
             {/* 块头: 类型徽章 + 摘要 + 排序/删除 */}
             <div
               className="flex items-center gap-1 px-1 py-1 cursor-pointer select-none"
@@ -92,13 +105,13 @@ export function ProtocolBlocksEditor({ blocks, onChange, lang }: ProtocolBlocksE
             >
               <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-sm text-[9px] font-semibold uppercase tracking-wide flex-shrink-0 border ${cfg.badgeClass}`}>
                 {cfg.icon}
-                {t(lang, cfg.labelKey)}
+                {translate(cfg.labelKey, lang)}
               </span>
               <span className="text-[10px] text-text-secondary font-mono truncate flex-1 min-w-0">
                 {blockSummary(block)}
               </span>
               <button
-                className="text-text-secondary hover:text-text-primary flex-shrink-0 p-0.5 disabled:opacity-30"
+                className="text-text-secondary hover:text-text-primary flex-shrink-0 p-0.5 disabled:opacity-disabled"
                 onClick={(e) => { e.stopPropagation(); moveBlock(idx, -1); }}
                 disabled={idx === 0}
                 title="↑"
@@ -106,7 +119,7 @@ export function ProtocolBlocksEditor({ blocks, onChange, lang }: ProtocolBlocksE
                 <ArrowUp size={10} />
               </button>
               <button
-                className="text-text-secondary hover:text-text-primary flex-shrink-0 p-0.5 disabled:opacity-30"
+                className="text-text-secondary hover:text-text-primary flex-shrink-0 p-0.5 disabled:opacity-disabled"
                 onClick={(e) => { e.stopPropagation(); moveBlock(idx, 1); }}
                 disabled={idx === blocks.length - 1}
                 title="↓"
@@ -119,7 +132,7 @@ export function ProtocolBlocksEditor({ blocks, onChange, lang }: ProtocolBlocksE
               <button
                 className="text-text-secondary hover:text-red flex-shrink-0 p-0.5"
                 onClick={(e) => { e.stopPropagation(); removeBlock(idx); }}
-                title={t(lang, 'removeWidget')}
+                title={translate('removeWidget', lang)}
               >
                 <Trash2 size={10} />
               </button>
@@ -145,13 +158,13 @@ export function ProtocolBlocksEditor({ blocks, onChange, lang }: ProtocolBlocksE
             <button
               key={bt}
               type="button"
-              className="inline-flex items-center gap-1 bg-transparent border border-dashed border-border text-text-secondary px-1.5 py-0.5 text-[10px] rounded-sm cursor-pointer transition-all hover:text-text-primary hover:border-accent"
+              className="inline-flex items-center gap-1 bg-transparent border border-dashed border-border text-text-secondary px-1.5 py-0.5 text-[10px] rounded-sm cursor-pointer motion-transition hover:text-text-primary hover:border-accent"
               onClick={() => addBlock(bt)}
-              title={t(lang, cfg.addLabelKey)}
+              title={translate(cfg.addLabelKey, lang)}
             >
               <Plus size={10} />
               <span className={`inline-flex items-center gap-0.5 ${cfg.iconClass}`}>{cfg.icon}</span>
-              <span>{t(lang, cfg.addLabelKey)}</span>
+              <span>{translate(cfg.addLabelKey, lang)}</span>
             </button>
           );
         })}

@@ -3,27 +3,25 @@ use crate::GraphDerived;
 use acquisition::PortDirection;
 use app::{SourceGraphs, SourceNodeHint, WidgetRecord, WorkspaceState};
 use buffer_graph::Edge;
-use data_model::{
-    device::{DevicePort, DevicePortDirection, DevicePortDomain},
-    Error, Result,
-};
+use data_model::device::{DevicePort, DevicePortDirection, DevicePortDomain};
+use error::{AppError as Error, Result};
+use events::BackendEventSink;
 use flow::PayloadKind;
 use kind::document::{NodeBusiness, NodeDocument};
 use pipeline::DataPlaneState;
 use std::{
     collections::{HashMap, HashSet},
-    sync::{atomic::AtomicU64, Arc},
+    sync::{Arc, atomic::AtomicU64},
 };
-use tauri::AppHandle;
 
 #[allow(clippy::implicit_hasher, clippy::too_many_arguments)]
 pub async fn apply_document(
-    graphs: &Arc<parking_lot::Mutex<HashMap<String, pipeline::CompiledGraph>>>,
+    graphs: &Arc<parking_lot::Mutex<HashMap<String, graph::CompiledGraph>>>,
     version: &Arc<AtomicU64>,
     plane: &DataPlaneState,
     sources: &SourceGraphs,
     workspace: &WorkspaceState,
-    app: Option<&AppHandle>,
+    sink: Option<&dyn BackendEventSink>,
     tab_id: String,
     documents: Vec<NodeDocument>,
     edges: Vec<Edge>,
@@ -40,12 +38,32 @@ pub async fn apply_document(
         if doc.tab_id != tab_id || !ids.insert(doc.id.clone()) {
             return Err(invalid("node tab ownership or identity is invalid".into()));
         }
+        if let NodeBusiness::Device { node } = &doc.business {
+            for id in crate::device_tree::declaration_ids(node)?
+                .into_iter()
+                .skip(1)
+            {
+                if !ids.insert(id) {
+                    return Err(invalid("device tree node IDs must be unique".into()));
+                }
+            }
+        }
     }
-    if sources
-        .lock()
-        .iter()
-        .any(|(tab, graph)| tab != &tab_id && graph.nodes.iter().any(|n| ids.contains(&n.id)))
-    {
+    if sources.lock().iter().any(|(tab, graph)| {
+        tab != &tab_id
+            && graph.nodes.iter().any(|node| {
+                ids.contains(&node.id)
+                    || match &node.kind {
+                        kind::NodeKind::Acquisition { node, .. } => {
+                            data_model::device_tree::DeviceTreeDocument::new(node.clone())
+                                .node_ids()
+                                .iter()
+                                .any(|id| ids.contains(id.as_str()))
+                        }
+                        _ => false,
+                    }
+            })
+    }) {
         return Err(invalid("node IDs must be unique across tabs".into()));
     }
     if edges
@@ -76,24 +94,21 @@ pub async fn apply_document(
     let mut widgets = Vec::new();
     let mut hints = HashMap::new();
     for doc in &documents {
-        let ports = if let NodeBusiness::Device {
-            driver,
-            capability_endpoint_id,
-            ..
-        } = &doc.business
-        {
+        let ports = if let NodeBusiness::Device { node } = &doc.business {
             let adapter = capabilities
                 .iter()
-                .find(|adapter| adapter.adapter_id == driver.driver_id)
-                .ok_or_else(|| invalid(format!("unknown device adapter {}", driver.driver_id.0)))?;
+                .find(|adapter| adapter.adapter_id.as_str() == node.driver.as_str())
+                .ok_or_else(|| {
+                    invalid(format!("unknown device adapter {}", node.driver.as_str()))
+                })?;
             let endpoint = adapter
                 .endpoints
                 .iter()
-                .find(|endpoint| Some(&endpoint.id) == capability_endpoint_id.as_ref())
+                .find(|endpoint| Some(&endpoint.id) == node.capability_endpoint_id.as_ref())
                 .ok_or_else(|| {
                     invalid(format!(
                         "unknown endpoint for adapter {}",
-                        driver.driver_id.0
+                        node.driver.as_str()
                     ))
                 })?;
             endpoint
@@ -134,18 +149,9 @@ pub async fn apply_document(
                     params,
                 });
                 hint.raw_data = widget_kind == "RawData";
-                hint.default_input = match widget_kind.as_str() {
-                    "Math" | "Filter" | "FFT" => Some("in0".into()),
-                    "IFFT" | "Spectrum" => Some("spectrum".into()),
-                    "TextDisplay" | "TextOut" => Some("text".into()),
-                    "Trigger" => Some("trigger".into()),
-                    "RawData" => Some("data".into()),
-                    "Waveform" | "PieChart" | "Image" | "Gauge" | "Progress" | "LED"
-                    | "NumberDisplay" | "Label" | "Model3D" | "Command" | "TableView" => {
-                        Some("value".into())
-                    }
-                    _ => None,
-                };
+                // 默认 handle 规则单一来源: app::models::describe (描述与提交共用)
+                hint.default_input =
+                    app::models::describe::default_handle_for(widget_kind, &[], true);
             }
             NodeBusiness::Device { .. } => {
                 if let kind::NodeKind::Acquisition { ports, .. } = &node.kind {
@@ -185,7 +191,7 @@ pub async fn apply_document(
         plane,
         sources,
         workspace,
-        app,
+        sink,
         tab_id,
         nodes,
         edges,

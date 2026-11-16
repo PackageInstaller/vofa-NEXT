@@ -2,44 +2,55 @@
 
 pub mod backend;
 mod capabilities;
+pub mod config;
 pub mod handle;
 mod point_simulation;
 pub mod simulation;
 pub use backend::{
-    ConnectionControl, FlowRecvError, FlowTryRecvError, LegacyFlowReceiver, TransportBackend,
-    TransportConnection,
+    BroadcastFlowReceiver, ByteMessage, ConnectionControl, FlowReceiver, FlowRecvError,
+    FlowTryRecvError, TransportBackend, TransportConnection,
 };
 pub use handle::LiveNodeHandle;
 mod lanes;
-mod runtime;
+pub mod operation;
+pub mod plan;
+mod plane;
+pub mod pump;
+pub mod session;
 mod stores;
 mod supervisor;
+mod unconfigured;
 
 pub use capabilities::{
-    AdapterCapability, AddressRegion, AddressSpaceDescriptor, ConfigurationSchema,
+    AdapterCapability, AddressRegion, AddressSpaceDescriptor, CAPABILITY_CONTRACT_VERSION,
     DiscoveredEndpoint, DisplaySemantics, EndpointDescriptor, EndpointDirection, PortDescriptor,
     PortDirection, ProtocolKind, RuntimeState, RuntimeStatus, TransportKind,
-    CAPABILITY_CONTRACT_VERSION,
 };
+pub use config::{ReconnectConfig, reconnect_delay};
 pub use lanes::{CommandLane, EventLane, EventLaneReceiver, LaneError, StateLane, StateLaneStats};
-pub use runtime::{AcquisitionRuntime, EndpointConnectionState, EndpointSnapshot};
+pub use operation::OperationError;
+pub use plan::{PlanError, PlannedPoint, ReadWindow, WindowPoint, plan_windows};
+pub use plane::{AcquisitionBackend, AcquisitionRuntime};
+pub use pump::{ByteCancel, ByteDataSender, BytePump, ByteWriteSender, spawn_byte_pump};
+pub use session::{ConnectionSlot, SessionState};
 pub use stores::{CommandLedger, CommandStatus, EventLog, PointStore};
 pub use supervisor::{SourceState, SourceSupervisor, SupervisorHandle};
+pub use unconfigured::UnconfiguredAcquisitionBackend;
 
 use async_trait::async_trait;
-use data_model::device::{DriverId, DriverPayload};
+use data_model::device::DriverPayload;
+use data_model::device_tree::DriverId;
 use flow::PayloadKind;
 use points::{
     AcquisitionIntent, PointEnvelope, PointId, ReadRequest, ReadResult, WriteRequest, WriteResult,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::mpsc;
 
 pub type AcquisitionResult<T> = Result<T, AcquisitionError>;
@@ -52,8 +63,8 @@ pub enum AcquisitionError {
     DriverMismatch { expected: String, actual: String },
     #[error("unknown driver: {0}")]
     UnknownDriver(String),
-    #[error("unknown endpoint: {0}")]
-    UnknownEndpoint(String),
+    #[error("unknown node: {0}")]
+    UnknownNode(String),
     #[error("source is busy")]
     Busy,
     #[error("source is closed")]
@@ -66,7 +77,7 @@ pub enum AcquisitionError {
     Driver(String),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct DriverManifest {
     pub id: DriverId,
@@ -75,7 +86,7 @@ pub struct DriverManifest {
     pub capabilities: CapabilitySet,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct DriverSchema {
     pub schema_version: u32,
@@ -86,7 +97,7 @@ pub struct DriverSchema {
 // 能力位图按命名 bool 字段表达 — 每一位都是稳定的外部合同 (驱动清单/IPC),
 // 收敛成位标志或嵌套分组会降低序列化可读性
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilitySet {
     pub byte_source: bool,
@@ -99,7 +110,7 @@ pub struct CapabilitySet {
     pub method: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionCapabilities {
     pub available: CapabilitySet,
@@ -236,8 +247,8 @@ pub trait SourceFactory: Send + Sync {
         let expected = &self.manifest().id;
         if config.driver_id() != expected {
             return Err(AcquisitionError::DriverMismatch {
-                expected: expected.0.clone(),
-                actual: config.driver_id().0.clone(),
+                expected: expected.to_string(),
+                actual: config.driver_id().to_string(),
             });
         }
         config.open(context).await
@@ -271,6 +282,9 @@ pub trait SourceSession: Send + Sync {
     fn writer(&self) -> Option<&dyn WriteCapability> {
         None
     }
+    fn invoker(&self) -> Option<&dyn InvokeCapability> {
+        None
+    }
     async fn stopped(&self) -> AcquisitionResult<()>;
     async fn close(&self) -> AcquisitionResult<()>;
 }
@@ -280,21 +294,21 @@ pub trait ReadCapability: Send + Sync {
     async fn read(&self, request: ReadRequest) -> AcquisitionResult<ReadResult>;
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SubscriptionIntent {
     pub points: Vec<PointId>,
     pub acquisition: AcquisitionIntent,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PointRejection {
     pub point_id: PointId,
     pub reason: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct EffectiveSubscription {
     pub accepted: Vec<PointId>,
@@ -318,6 +332,11 @@ pub trait WriteCapability: Send + Sync {
     async fn write(&self, request: WriteRequest) -> AcquisitionResult<WriteResult>;
 }
 
+#[async_trait]
+pub trait InvokeCapability: Send + Sync {
+    async fn invoke(&self, method: &str, args: Value) -> AcquisitionResult<Value>;
+}
+
 /// Returns an internal consistency error when declared capability bits and
 /// session handles disagree. Adapters use this in their contract tests.
 pub fn validate_capability_contract(session: &dyn SourceSession) -> AcquisitionResult<()> {
@@ -330,6 +349,7 @@ pub fn validate_capability_contract(session: &dyn SourceSession) -> AcquisitionR
             session.subscriber().is_some(),
         ),
         ("write", declared.write, session.writer().is_some()),
+        ("method", declared.method, session.invoker().is_some()),
     ];
     for (name, bit, handle) in checks {
         if bit != handle {
@@ -339,44 +359,4 @@ pub fn validate_capability_contract(session: &dyn SourceSession) -> AcquisitionR
         }
     }
     Ok(())
-}
-
-/// Cold-path registry populated only by the composition root.
-#[derive(Default)]
-pub struct SourceRegistry {
-    factories: parking_lot::RwLock<BTreeMap<DriverId, std::sync::Arc<dyn SourceFactory>>>,
-}
-
-impl SourceRegistry {
-    pub fn register(&self, factory: std::sync::Arc<dyn SourceFactory>) {
-        self.factories
-            .write()
-            .insert(factory.manifest().id.clone(), factory);
-    }
-
-    pub fn factory(&self, driver_id: &DriverId) -> Option<std::sync::Arc<dyn SourceFactory>> {
-        self.factories.read().get(driver_id).cloned()
-    }
-
-    pub fn manifests(&self) -> Vec<DriverManifest> {
-        self.factories
-            .read()
-            .values()
-            .map(|factory| factory.manifest().clone())
-            .collect()
-    }
-
-    pub fn adapter_capabilities(&self) -> Vec<AdapterCapability> {
-        self.factories
-            .read()
-            .values()
-            .map(|factory| factory.adapter_capability())
-            .collect()
-    }
-
-    pub fn discover(&self, driver_id: &DriverId) -> AcquisitionResult<Vec<DiscoveredEndpoint>> {
-        self.factory(driver_id)
-            .ok_or_else(|| AcquisitionError::UnknownDriver(driver_id.0.clone()))?
-            .discover()
-    }
 }

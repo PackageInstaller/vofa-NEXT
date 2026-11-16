@@ -1,14 +1,19 @@
 [package]
-name = "can-transport"
+name = "lissio-can-transport"
 description = "Lissio CAN 桥接传输 — Slcan (ASCII over serial) + CandleLight (原生 USB bulk)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "can_transport"
 
 [lints]
 workspace = true
 
 [dependencies]
+serialport = { workspace = true }
 serde_json = { workspace = true }
 acquisition = { workspace = true }
 data_model = { workspace = true }
@@ -17,7 +22,6 @@ tokio = { workspace = true }
 log = { workspace = true }
 thiserror = { workspace = true }
 error = { workspace = true }
-transport = { workspace = true }
 serial = { workspace = true }
 schema_types = { workspace = true }
 async-trait = { workspace = true }

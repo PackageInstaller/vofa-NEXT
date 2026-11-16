@@ -78,7 +78,7 @@ export function TourPopover(props: TourPopoverProps) {
   return (
     <div
       ref={bodyRef}
-      className="fixed w-80 rounded-lg border border-border bg-bg-sidebar shadow-modal p-4 flex flex-col gap-3 animate-[tour-pop-in_0.18s_ease-out]"
+      className="fixed w-80 dialog-surface p-4 flex flex-col gap-3 motion-pop-in"
       style={{ left: style.left, top: style.top, pointerEvents: 'auto' }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -112,7 +112,7 @@ export function TourPopover(props: TourPopoverProps) {
           <span
             className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border-[1.5px] text-[11px] leading-none select-none transition-colors ${
               gate.passed
-                ? 'animate-[tour-tick-in_0.22s_cubic-bezier(0.2,1.4,0.5,1)] border-accent bg-accent text-text-inverse'
+                ? 'motion-tick-in border-accent bg-accent text-text-inverse'
                 : 'border-accent text-transparent'
             }`}
             aria-hidden
@@ -142,7 +142,7 @@ export function TourPopover(props: TourPopoverProps) {
       <div className="flex items-center justify-between gap-2 pt-0.5">
         <button
           type="button"
-          className="cursor-pointer rounded border border-transparent bg-transparent px-2.5 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+          className="cursor-pointer rounded border border-transparent bg-transparent px-2.5 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-disabled"
           onClick={onPrev}
           disabled={stepIndex === 0}
         >
@@ -150,7 +150,7 @@ export function TourPopover(props: TourPopoverProps) {
         </button>
         <button
           type="button"
-          className="cursor-pointer rounded border border-transparent bg-bg-button px-3 py-1 text-xs text-text-inverse transition-colors hover:bg-bg-button-hover disabled:cursor-not-allowed disabled:opacity-45"
+          className="cursor-pointer rounded border border-transparent bg-bg-button px-3 py-1 text-xs text-text-inverse transition-colors hover:bg-bg-button-hover disabled:cursor-not-allowed disabled:opacity-disabled"
           onClick={onNext}
           disabled={nextDisabled}
         >

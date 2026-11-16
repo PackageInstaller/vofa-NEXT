@@ -1,8 +1,8 @@
 //! ISO-TP 集成测试 — PCI 常量验证 + Session API smoke + Handle clone
 
 use can::{CanDirection, CanFrame};
-use data_model::Result;
 use diagnostic::{IsoTpAddressMode, IsoTpConfig};
+use error::Result;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use transport::CanBackend;
@@ -44,7 +44,7 @@ const fn dummy_cfg() -> IsoTpConfig {
 
 #[test]
 fn pci_type_extraction_matches_iso_spec() {
-    use automotive_isotp::constants::{pci_type, PCI_CF, PCI_FC, PCI_FF, PCI_SF};
+    use automotive_isotp::constants::{PCI_CF, PCI_FC, PCI_FF, PCI_SF, pci_type};
     assert_eq!(PCI_SF, 0x00);
     assert_eq!(PCI_FF, 0x10);
     assert_eq!(PCI_CF, 0x20);
@@ -152,4 +152,19 @@ fn automotive_error_formats_all_variants() {
     // AutomotiveResult 别名可承载 IsoTp 错误变体
     let r: AutomotiveResult<()> = Err(AutomotiveError::IsoTpTimeout { tx_id: 1 });
     assert!(r.is_err());
+}
+
+#[tokio::test]
+async fn pending_request_times_out_instead_of_waiting_forever() {
+    let (rx, _) = broadcast::channel::<CanFrame>(16);
+    let backend: Arc<dyn transport::CanBackend> = Arc::new(DummyBackend { rx });
+    let session = IsoTpSession::new(backend, dummy_cfg());
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        session.handle().send_request(0x600, 0x658, vec![0x3e]),
+    )
+    .await
+    .expect("ISO-TP response timeout must fire");
+    assert!(result.is_err());
+    session.shutdown().await;
 }

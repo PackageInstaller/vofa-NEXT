@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { t } from '../../../i18n';
+import { translate } from '../../../i18n';
 import type { Lang } from '../../../i18n';
 
 export interface LiveModePanelProps {
@@ -24,10 +24,10 @@ export function LiveModePanel({ portNames, liveOutputs, enableValid, enableFrame
 
   return (
     <>
-      <div className="text-[10px] text-text-secondary uppercase tracking-wide font-semibold">{t(lang, 'fdLiveOutputs')}</div>
+      <div className="section-heading section-heading--micro">{translate('fdLiveOutputs', lang)}</div>
       <div className="bg-bg-editor border border-border rounded p-2 flex flex-col gap-1">
         {allPorts.length === 0 ? (
-          <div className="text-xs text-text-secondary opacity-60 italic py-2 text-center">{t(lang, 'fdNoPorts')}</div>
+          <div className="text-xs text-text-secondary opacity-muted italic py-2 text-center">{translate('fdNoPorts', lang)}</div>
         ) : (
           allPorts.map((port) => {
             const val = liveOutputs[port];
@@ -35,7 +35,7 @@ export function LiveModePanel({ portNames, liveOutputs, enableValid, enableFrame
             return (
               <div key={port} className="flex items-center justify-between gap-2 px-1.5 py-0.5 bg-bg-editor rounded-sm">
                 <span className="text-[10px] text-text-secondary font-mono">{port}</span>
-                <span className={`text-xs font-mono ${hasVal ? 'text-green' : 'text-text-secondary opacity-60'}`}>
+                <span className={`text-xs font-mono ${hasVal ? 'text-green' : 'text-text-secondary opacity-muted'}`}>
                   {hasVal ? val.toFixed(4) : '—'}
                 </span>
               </div>
@@ -43,8 +43,8 @@ export function LiveModePanel({ portNames, liveOutputs, enableValid, enableFrame
           })
         )}
       </div>
-      <div className="text-[10px] text-text-secondary opacity-70 px-1">
-        {t(lang, 'fdLiveHint')}
+      <div className="text-[10px] text-text-secondary opacity-secondary px-1">
+        {translate('fdLiveHint', lang)}
       </div>
     </>
   );

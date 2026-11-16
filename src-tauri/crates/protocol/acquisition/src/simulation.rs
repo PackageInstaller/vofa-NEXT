@@ -1,9 +1,14 @@
 //! Deterministic generators shared by byte and point simulations.
 use crate::{AcquisitionError, AcquisitionResult};
 use data_model::device::{SignalParameters, SimulationConfig, TestWaveform};
+use data_model::simulation::{MAX_SAMPLE_RATE, SimulationRate};
+use schema_types::ProtocolConfig;
 
 pub fn validate(config: &SimulationConfig) -> AcquisitionResult<()> {
-    if !(1..=700_000).contains(&config.sample_rate) || !(1..=256).contains(&config.channels) {
+    // 上限为流式协议的采样率上限（见 `data_model::simulation`）；帧定界协议另由
+    // [`validate_for_protocol`] 按帧率上限收窄。
+    if !(1..=MAX_SAMPLE_RATE).contains(&config.sample_rate) || !(1..=256).contains(&config.channels)
+    {
         return Err(AcquisitionError::InvalidConfig(
             "simulation rate/channels out of range".into(),
         ));
@@ -20,6 +25,38 @@ pub fn validate(config: &SimulationConfig) -> AcquisitionResult<()> {
             ));
         }
     }
+    Ok(())
+}
+
+/// 按下游协议的量纲校验模拟配置。
+///
+/// `SimulationConfig::sample_rate` 的语义随协议而变: 帧定界协议
+/// ([`ProtocolConfig::is_frame_oriented`]) 下每个采样点产出一帧 CAN 报文, 该值即
+/// 帧率。用户若按「对齐 500k 波特率」把它填成 500 000, 链路会以 50 万帧/s 运行
+/// (真实 CAN 总线 2~5 k帧/s), 广播环与缓冲会按该量级驻留数百 MB。故此处按
+/// [`ProtocolConfig::max_simulation_rate`] 收窄上限, 并以类型构造完成校验。
+///
+/// # Errors
+///
+/// 基础范围校验失败, 或速率超过该协议量纲上限时返回
+/// [`AcquisitionError::InvalidConfig`]。
+pub fn validate_for_protocol(
+    config: &SimulationConfig,
+    protocol: &ProtocolConfig,
+) -> AcquisitionResult<()> {
+    validate(config)?;
+    let max = protocol.max_simulation_rate();
+    SimulationRate::new(config.sample_rate, max).map_err(|error| {
+        let dimension = if protocol.is_frame_oriented() {
+            "CAN frame rate (frames/s)"
+        } else {
+            "sample rate (samples/s)"
+        };
+        AcquisitionError::InvalidConfig(format!(
+            "{error} — with this protocol the simulation rate is a {dimension}, \
+             so it must not be derived from the bus bitrate"
+        ))
+    })?;
     Ok(())
 }
 
@@ -55,28 +92,5 @@ pub fn sample(signal: &SignalParameters, seed: u32, index: u64, rate: u32, key: 
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn deterministic_random_and_wave_parameters() {
-        let signal = SignalParameters {
-            waveform: TestWaveform::Random,
-            amplitude: 2.0,
-            offset: 4.0,
-            ..Default::default()
-        };
-        let a: Vec<_> = (0..100)
-            .map(|i| sample(&signal, 42, i, 100, "pressure"))
-            .collect();
-        let b: Vec<_> = (0..100)
-            .map(|i| sample(&signal, 42, i, 100, "pressure"))
-            .collect();
-        assert_eq!(a, b);
-        assert!(a.iter().all(|x| (2.0..=6.0).contains(x)));
-        assert!(
-            (sample(&signal, 42, 1, 100, "pressure") - sample(&signal, 43, 1, 100, "pressure"))
-                .abs()
-                > f64::EPSILON
-        );
-    }
-}
+#[path = "simulation_tests.rs"]
+mod tests;

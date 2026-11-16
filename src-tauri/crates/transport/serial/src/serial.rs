@@ -1,9 +1,11 @@
-use data_model::{PortInfo, Result, SerialConfig, INGEST_CHANNEL_CAPACITY};
+use acquisition::ByteMessage;
+use data_model::{INGEST_CHANNEL_CAPACITY, PortInfo, SerialConfig};
+use error::Result;
 use error::TransportError;
-use serialport::{DataBits, FlowControl, Parity, SerialPortType, StopBits};
+use serialport::{DataBits, FlowControl, Parity, StopBits};
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 
@@ -36,50 +38,9 @@ const fn serial_open_error(port: String, source: std::io::Error) -> TransportErr
     TransportError::SerialOpen { port, source }
 }
 
-#[cfg(windows)]
-use crate::windows_ports::port_descriptions;
-
-#[cfg(not(windows))]
-fn port_descriptions() -> std::collections::HashMap<String, String> {
-    std::collections::HashMap::new()
-}
-
-/// 列出所有可用串口
+/// Enumerate unique serial interfaces with normalized system descriptions.
 pub fn list_ports() -> Result<Vec<PortInfo>> {
-    let ports =
-        serialport::available_ports().map_err(|e| TransportError::SerialEnumeration(e.into()))?;
-    let descriptions = port_descriptions();
-    Ok(ports
-        .into_iter()
-        .map(|p| {
-            let (port_type, vid, pid, serial_number, manufacturer, product) = match p.port_type {
-                SerialPortType::UsbPort(info) => (
-                    "USB".to_string(),
-                    Some(info.vid),
-                    Some(info.pid),
-                    info.serial_number,
-                    info.manufacturer,
-                    info.product,
-                ),
-                SerialPortType::PciPort => ("PCI".to_string(), None, None, None, None, None),
-                SerialPortType::BluetoothPort => {
-                    ("Bluetooth".to_string(), None, None, None, None, None)
-                }
-                SerialPortType::Unknown => ("Unknown".to_string(), None, None, None, None, None),
-            };
-            let description = descriptions.get(&p.port_name).cloned();
-            PortInfo {
-                name: p.port_name,
-                port_type,
-                vid,
-                pid,
-                serial_number,
-                manufacturer,
-                product,
-                description,
-            }
-        })
-        .collect())
+    crate::ports::list_ports()
 }
 
 /// 启动串口传输
@@ -90,7 +51,7 @@ pub fn spawn(
     config: SerialConfig,
 ) -> Result<(
     mpsc::Sender<Vec<u8>>,
-    broadcast::Sender<Vec<u8>>,
+    broadcast::Sender<ByteMessage>,
     Arc<AtomicBool>,
 )> {
     spawn_with_lifecycle(
@@ -114,7 +75,7 @@ pub fn spawn_with_lifecycle(
     lifecycle: Arc<dyn SerialLifecycle>,
 ) -> Result<(
     mpsc::Sender<Vec<u8>>,
-    broadcast::Sender<Vec<u8>>,
+    broadcast::Sender<ByteMessage>,
     Arc<AtomicBool>,
 )> {
     let mut port = serialport::new(&settings.port_name, settings.baud_rate)
@@ -156,13 +117,14 @@ pub fn spawn_with_lifecycle(
     let data_tx_read = data_tx.clone();
     let cancel_read = cancel.clone();
     let read_lifecycle = lifecycle;
+    let read_port_name = settings.port_name.clone();
     std::thread::spawn(move || {
         let mut buf = vec![0u8; 65536].into_boxed_slice();
         while !cancel_read.load(Ordering::Relaxed) {
             match port.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    let _ = data_tx_read.send(buf[..n].to_vec());
+                    let _ = data_tx_read.send(ByteMessage::from_device(buf[..n].to_vec()));
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {}
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
@@ -170,24 +132,29 @@ pub fn spawn_with_lifecycle(
             }
         }
         read_lifecycle.on_close(port.as_mut());
-        log::debug!("串口读线程退出");
+        log::info!("串口读线程退出: port={read_port_name}");
     });
 
-    // 写线程
+    // 写线程。取消必须在无待写数据时也能退出，不能永久阻塞在 blocking_recv；
+    // TransportHandle::close 同时释放 write_tx，作为 channel 关闭的最终兜底。
     let cancel_write = cancel.clone();
+    let write_port_name = settings.port_name.clone();
     std::thread::spawn(move || {
         while !cancel_write.load(Ordering::Relaxed) {
-            match write_rx.blocking_recv() {
-                Some(data) => {
+            match write_rx.try_recv() {
+                Ok(data) => {
                     if let Err(e) = write_port.write_all(&data) {
                         log::error!("串口写入失败: {e}");
                         break;
                     }
                 }
-                None => break,
+                Err(mpsc::error::TryRecvError::Empty) => {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(mpsc::error::TryRecvError::Disconnected) => break,
             }
         }
-        log::debug!("串口写线程退出");
+        log::info!("串口写线程退出: port={write_port_name}");
     });
 
     Ok((write_tx, data_tx, cancel))

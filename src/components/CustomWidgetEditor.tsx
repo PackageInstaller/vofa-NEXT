@@ -1,12 +1,13 @@
 import { useState, useMemo, useEffect } from 'react';
 import { X, Play, Save, FileCode, AlertCircle, AlertTriangle, RotateCcw, HelpCircle } from 'lucide-react';
 import { CodeEditor } from './CodeEditor';
-import { CustomWidget, evalCustomWidgetDef } from './widgets/custom/CustomWidget';
+import { CustomWidget } from './widgets/custom/CustomWidget';
+import { evalCustomWidgetDef } from '../lib/models/customWidgetDef';
 import { CustomWidgetHelpModal } from './CustomWidgetHelpModal';
 import type { WidgetConfig } from '../types';
 import { useAppStore } from '../store/appStore';
-import { t } from '../i18n';
-import { activateOnKeyboard } from '../lib/utils/a11y';
+import { translate } from '../i18n';
+import { DialogOverlay, DialogSurface } from './ui/Dialog';
 
 interface CustomWidgetEditorProps {
   widget: Extract<WidgetConfig, { kind: 'Custom' }>;
@@ -173,32 +174,23 @@ export function CustomWidgetEditor({ widget, isOpen, onClose, onSave }: CustomWi
     setPreviewKey((k) => k + 1);
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 bg-bg-overlay flex items-center justify-center z-modal animate-[settings-fade-in_0.15s_ease-out]"
-      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
-      onKeyDown={activateOnKeyboard}
-      role="button"
-      tabIndex={0}
-      aria-label={t(lang, 'close')}
-    >
-      <div
-        className="bg-bg-sidebar border border-border rounded-lg flex flex-col overflow-hidden shadow-modal animate-[settings-slide-in_0.2s_ease-out]"
-        style={{ width: '90vw', height: '85vh', maxWidth: 1200, maxHeight: 800 }}
+    <DialogOverlay open={isOpen} onDismiss={onClose}>
+      <DialogSurface
+        className="flex flex-col w-[90vw] h-[85vh] max-w-[1200px] max-h-[800px]"
+        label={translate('customWidgetEditor', lang)}
       >
-        <div className="flex items-center gap-3 px-4 py-3 bg-bg-panel-header border-b border-border text-text-bright font-semibold flex-shrink-0">
+        <div className="flex items-center gap-3 px-4 py-3 dialog-chrome border-b border-border text-text-bright font-semibold flex-shrink-0">
           <FileCode size={16} />
-          <span>{t(lang, 'customWidgetEditor')}</span>
+          <span>{translate('customWidgetEditor', lang)}</span>
           <button
             className="w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer ml-auto"
             onClick={() => setIsHelpOpen(true)}
-            title={t(lang, 'helpTitle')}
+            title={translate('helpTitle', lang)}
           >
             <HelpCircle size={14} />
           </button>
-          <button className="w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer" onClick={onClose} title={t(lang, 'customCancel')}>
+          <button className="w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer" onClick={onClose} title={translate('customCancel', lang)}>
             <X size={14} />
           </button>
         </div>
@@ -209,9 +201,9 @@ export function CustomWidgetEditor({ widget, isOpen, onClose, onSave }: CustomWi
         >
           <AlertTriangle size={14} className="flex-shrink-0 mt-0.25" />
           <div>
-            <strong>{t(lang, 'customPerfWarningTitle')}</strong>
-            <span className="ml-1.5 opacity-90">
-              {t(lang, 'customPerfWarning')}
+            <strong>{translate('customPerfWarningTitle', lang)}</strong>
+            <span className="ml-1.5">
+              {translate('customPerfWarning', lang)}
             </span>
           </div>
         </div>
@@ -219,9 +211,9 @@ export function CustomWidgetEditor({ widget, isOpen, onClose, onSave }: CustomWi
         <div className="flex-1 flex min-h-0">
           {/* 左侧: 代码编辑器 */}
           <div className="flex-1 flex flex-col min-w-0 border-r border-border">
-            <div className="flex items-center justify-between px-2.5 py-1.5 bg-bg-panel-header border-b border-border gap-1.5">
+            <div className="flex items-center justify-between px-2.5 py-1.5 dialog-chrome border-b border-border gap-1.5">
               <span className="text-text-secondary text-xs">
-                {t(lang, 'customWidgetCode')}
+                {translate('customWidgetCode', lang)}
               </span>
               <div className="flex gap-1 items-center">
                 <select
@@ -235,7 +227,7 @@ export function CustomWidgetEditor({ widget, isOpen, onClose, onSave }: CustomWi
                   }}
                   className="bg-bg-input border border-border text-text-primary text-xs px-1.5 py-0.5 rounded-sm"
                 >
-                  <option value="">{t(lang, 'customTemplate')}</option>
+                  <option value="">{translate('customTemplate', lang)}</option>
                   {PRESET_TEMPLATES.map((t) => (
                     <option key={t.name} value={t.name}>
                       {t.name} - {t.description}
@@ -245,7 +237,7 @@ export function CustomWidgetEditor({ widget, isOpen, onClose, onSave }: CustomWi
                 <button
                   className="w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer"
                   onClick={handleRebuildPreview}
-                  title={t(lang, 'customRebuildPreview')}
+                  title={translate('customRebuildPreview', lang)}
                 >
                   <RotateCcw size={12} />
                 </button>
@@ -254,7 +246,7 @@ export function CustomWidgetEditor({ widget, isOpen, onClose, onSave }: CustomWi
 
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-border">
               <label className="text-xs text-text-secondary">
-                {t(lang, 'label')}
+                {translate('label', lang)}
               </label>
               <input
                 type="text"
@@ -279,17 +271,17 @@ export function CustomWidgetEditor({ widget, isOpen, onClose, onSave }: CustomWi
 
             {/* 解析出的 schema 信息 */}
             {validation.def && (
-              <div className="px-2.5 py-1.5 bg-bg-panel-header border-t border-border text-xs text-text-secondary">
+              <div className="px-2.5 py-1.5 dialog-chrome border-t border-border text-xs text-text-secondary">
                 <div className="flex gap-1.5 items-baseline py-0.5">
-                  <span className="text-blue min-w-[80px]">{t(lang, 'customInputs')}:</span>
+                  <span className="text-blue min-w-[80px]">{translate('customInputs', lang)}:</span>
                   <span>{validation.def.inputs?.map((i) => i.label).join(', ') ?? '-'}</span>
                 </div>
                 <div className="flex gap-1.5 items-baseline py-0.5">
-                  <span className="text-blue min-w-[80px]">{t(lang, 'customOutputs')}:</span>
+                  <span className="text-blue min-w-[80px]">{translate('customOutputs', lang)}:</span>
                   <span>{validation.def.outputs?.map((o) => o.label).join(', ') ?? '-'}</span>
                 </div>
                 <div className="flex gap-1.5 items-baseline py-0.5">
-                  <span className="text-blue min-w-[80px]">{t(lang, 'customSettings')}:</span>
+                  <span className="text-blue min-w-[80px]">{translate('customSettings', lang)}:</span>
                   <span>{validation.def.settings?.map((s) => s.id).join(', ') ?? '-'}</span>
                 </div>
               </div>
@@ -297,12 +289,13 @@ export function CustomWidgetEditor({ widget, isOpen, onClose, onSave }: CustomWi
           </div>
 
           {/* 右侧: 预览 */}
-          <div className="w-[320px] flex flex-col bg-bg-editor flex-shrink-0">
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-bg-panel-header border-b border-border">
+          <div className="frost-content w-[320px] flex flex-col flex-shrink-0">
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 dialog-chrome border-b border-border">
               <Play size={12} className="text-green" />
-              <span className="text-xs">{t(lang, 'customPreview')}</span>
+              <span className="text-xs">{translate('customPreview', lang)}</span>
             </div>
-            <div className="flex-1 p-3 overflow-auto bg-bg-editor">
+            {/* 内层保持透明: 外层容器已经承担磨砂底色, 再叠一层会让预览区明显偏暗 */}
+            <div className="flex-1 p-3 overflow-auto">
               {validation.def ? (
                 <CustomWidget
                   key={previewKey}
@@ -310,16 +303,16 @@ export function CustomWidgetEditor({ widget, isOpen, onClose, onSave }: CustomWi
                 />
               ) : (
                 <div className="flex flex-col items-center gap-2 p-8 text-text-secondary text-sm">
-                  <AlertCircle size={24} className="opacity-40" />
-                  <span>{t(lang, 'customPreviewUnavailable')}</span>
+                  <AlertCircle size={24} className="opacity-subtle" />
+                  <span>{translate('customPreviewUnavailable', lang)}</span>
                 </div>
               )}
             </div>
 
             {/* 设置项编辑 */}
             {validation.def?.settings && validation.def.settings.length > 0 && (
-              <div className="px-3 py-2 border-t border-border bg-bg-sidebar max-h-[40%] overflow-y-auto">
-                <div className="text-xs text-text-secondary uppercase tracking-wide mb-1.5">{t(lang, 'customSettingsValues')}</div>
+              <div className="px-3 py-2 border-t border-border dialog-chrome-muted max-h-[40%] overflow-y-auto">
+                <div className="text-xs text-text-secondary uppercase tracking-wide mb-1.5">{translate('customSettingsValues', lang)}</div>
                 {validation.def.settings.map((s) => (
                   <div key={s.id} className="flex items-center gap-2 py-1">
                     <label className="text-xs text-text-primary min-w-[60px]">{s.label}</label>
@@ -364,23 +357,23 @@ export function CustomWidgetEditor({ widget, isOpen, onClose, onSave }: CustomWi
           </div>
         </div>
 
-        <div className="px-3 py-2 flex justify-end gap-2 bg-bg-panel-header border-t border-border">
+        <div className="px-3 py-2 flex justify-end gap-2 dialog-chrome border-t border-border">
           <button className="px-3 py-1.5 bg-transparent text-text-secondary border-none rounded cursor-pointer text-sm text-center transition-colors hover:bg-bg-hover hover:text-text-primary" onClick={onClose}>
-            {t(lang, 'customCancel')}
+            {translate('customCancel', lang)}
           </button>
           <button
-            className="px-3 py-1.5 bg-bg-button text-text-inverse border-none rounded cursor-pointer text-sm text-center transition-colors hover:bg-bg-button-hover inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-default"
+            className="px-3 py-1.5 bg-bg-button text-text-inverse border-none rounded cursor-pointer text-sm text-center transition-colors hover:bg-bg-button-hover inline-flex items-center gap-1 disabled:opacity-disabled disabled:cursor-default"
             onClick={handleSave}
             disabled={!validation.def}
           >
             <Save size={12} />
-            {t(lang, 'customSave')}
+            {translate('customSave', lang)}
           </button>
         </div>
-      </div>
+      </DialogSurface>
 
       {/* 帮助说明弹窗 */}
       <CustomWidgetHelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
-    </div>
+    </DialogOverlay>
   );
 }

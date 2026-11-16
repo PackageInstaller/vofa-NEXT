@@ -10,18 +10,18 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use data_model::Result;
+use error::Result;
 use error::{AppError, McpError};
 use parking_lot::Mutex;
+use rmcp::ServiceExt;
 use rmcp::model::{CallToolRequestParams, ContentBlock};
 use rmcp::service::{RoleClient, RunningService};
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
-use rmcp::ServiceExt;
 use serde_json::Value;
 use tokio::process::Command;
 
 use crate::store;
-use crate::types::{sanitize_segment, McpServerConfig, McpToolInfo, McpTransport};
+use crate::types::{McpServerConfig, McpToolInfo, McpTransport, sanitize_segment};
 
 /// 连接建立 (含 initialize 握手) 超时秒数。
 pub const CONNECTION_TIMEOUT_SECS: u64 = 10;
@@ -193,7 +193,7 @@ impl McpManager {
             let count = used.entry(base.clone()).or_insert(0);
             *count += 1;
             info.prefixed_name = if *count == 1 {
-                base.clone()
+                base
             } else {
                 format!("{base}_{count}")
             };
@@ -382,10 +382,10 @@ fn connect_error(name: &str, source: Box<dyn std::error::Error + Send + Sync>) -
 
 /// 工具结果 → 文本 (优先 structured_content, 否则拼接 Text 块)。
 fn extract_result_text(result: &rmcp::model::CallToolResult) -> String {
-    if let Some(sc) = &result.structured_content {
-        if let Ok(s) = serde_json::to_string(sc) {
-            return s;
-        }
+    if let Some(sc) = &result.structured_content
+        && let Ok(s) = serde_json::to_string(sc)
+    {
+        return s;
     }
     result
         .content
@@ -399,40 +399,5 @@ fn extract_result_text(result: &rmcp::model::CallToolResult) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// 合法/非法配置校验。
-    #[test]
-    fn validate_config_checks_fields() {
-        let stdio_ok = McpServerConfig {
-            id: "a".to_string(),
-            name: "A".to_string(),
-            transport: McpTransport::Stdio {
-                command: "uvx".to_string(),
-                args: vec![],
-                env: HashMap::default(),
-            },
-            enabled: true,
-        };
-        assert!(validate_config(&stdio_ok).is_ok());
-
-        let http_bad = McpServerConfig {
-            id: "b".to_string(),
-            name: "B".to_string(),
-            transport: McpTransport::Http {
-                url: "ftp://nope".to_string(),
-            },
-            enabled: true,
-        };
-        assert!(validate_config(&http_bad).is_err());
-    }
-
-    /// 前缀安全段折叠。
-    #[test]
-    fn sanitize_segment_folds() {
-        assert_eq!(sanitize_segment("My Server #1"), "my_server__1");
-        assert_eq!(sanitize_segment("中文 server"), "server");
-        assert_eq!(sanitize_segment("///"), "srv");
-    }
-}
+#[path = "manager_tests.rs"]
+mod tests;

@@ -22,7 +22,7 @@ impl ProtocolEngine for SchemaEngine {
         let ts = data_model::now_us();
         let mut base = 0usize;
 
-        loop {
+        while base < self.buf.len() {
             // 1. 帧定界: 定位 Header (无 Header 块则从当前位置起解析)
             let frame_start = if header.is_empty() {
                 0
@@ -56,6 +56,13 @@ impl ProtocolEngine for SchemaEngine {
                     valid,
                     consumed,
                 } => {
+                    // A schema containing only zero-width blocks can report a successful
+                    // parse without consuming input. Never emit a frame or retry the same
+                    // offset: that would grow `frames` without bound in a single feed call.
+                    if consumed == 0 {
+                        base += 1;
+                        continue;
+                    }
                     base += consumed;
                     if valid {
                         // checksum 失败跳过该帧; 输出按端口序
@@ -74,16 +81,13 @@ impl ProtocolEngine for SchemaEngine {
             self.buf.drain(..base);
         }
         // 防止缓冲区无限增长 (与 JustFloatEngine 一致)
-        if self.buf.len() > 8192 {
-            let drop = self.buf.len() - 4096;
-            self.buf.drain(..drop);
-        }
+        protocol::buffer::truncate_buffer(&mut self.buf);
 
         FeedOutput::from_frames(frames)
     }
 
     fn encode_channel(&mut self, channel: usize, value: f32) -> Vec<u8> {
-        // 单通道发送: 该通道写值, 其余通道 0 (与 legacy 引擎语义一致)
+        // 单通道发送: 该通道写值, 其余通道 0 (与预设引擎语义一致)
         let mut values = vec![0.0f32; self.ports.len().max(channel + 1)];
         if channel < values.len() {
             values[channel] = value;

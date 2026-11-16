@@ -72,9 +72,9 @@ export type DecoderBlock =
       /// 整数字段类型 (uint8/16/32 LE/BE)
       fieldType: FieldType;
       /// 输出端口名 (默认 "length")
-      portName?: string;
+      portName?: string | null;
       /// 长度单位: bytes=字节数, fields=后续 field 块重复次数
-      unit?: 'bytes' | 'fields';
+      unit?: 'bytes' | 'fields' | null;
       matchId?: number | null;
     }
   | {
@@ -84,7 +84,7 @@ export type DecoderBlock =
       /// 整数字段类型
       fieldType: FieldType;
       /// 输出端口名 (默认 "id_value")
-      portName?: string;
+      portName?: string | null;
     }
   | {
       id: string;
@@ -123,13 +123,13 @@ export type DecoderBlock =
       /// 校验算法
       algorithm: ChecksumType;
       /// 自定义脚本 (algorithm='custom' 时使用)
-      customScript?: string;
+      customScript?: string | null;
       /// 校验覆盖范围
       cover: DecoderChecksumCover;
       /// cover='range' 时的起始字节偏移 (相对帧头之后)
-      coverStart?: number;
+      coverStart?: number | null;
       /// cover='range' 时的结束字节偏移 ( exclusive)
-      coverEnd?: number;
+      coverEnd?: number | null;
       /// 校验字节在帧中的位置
       position: DecoderChecksumPosition;
       /// 仅当 id_value === matchId 时执行
@@ -305,19 +305,6 @@ export interface CommandConfig {
   /// 回环模式开关 — 开启后发送的字节会被协议引擎解析并显示对照 (仅影响发送路径, 与发送模式无关)
   loopbackEnabled: boolean;
   /// 回环历史记录
-  loopbackHistory: LoopbackResult[];
-}
-
-/// 旧版 (单帧) 命令发送控件配置 — 仅用于快照/持久化数据迁移
-/// blocks/appendNewline/sendMode/timerMs 已迁入 CommandFrame
-export interface LegacyCommandConfig {
-  id: string;
-  label: string;
-  blocks: CommandBlock[];
-  appendNewline: boolean;
-  loopbackEnabled: boolean;
-  sendMode: 'manual' | 'onChange' | 'timer';
-  timerMs: number;
   loopbackHistory: LoopbackResult[];
 }
 

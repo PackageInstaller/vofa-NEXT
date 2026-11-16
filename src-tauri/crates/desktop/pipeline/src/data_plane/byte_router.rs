@@ -11,14 +11,14 @@
 //! - FrameDecoder 节点 `in`: 走 feed_one_decoder 语义 (按边路由)
 //! - 设备节点 `tx`: AcquisitionRuntime.send (协议转换回注 / 命令发送落地)
 
+use events::BackendEventSink;
 use kind::{
-    NodeKind, FRAME_DECODER_IN_HANDLE, LOOPBACK_OUT_HANDLE, PROTOCOL_IN_HANDLE,
+    FRAME_DECODER_IN_HANDLE, LOOPBACK_OUT_HANDLE, NodeKind, PROTOCOL_IN_HANDLE,
     PROTOCOL_OUT_HANDLE, TRANSPORT_TX_HANDLE,
 };
-use tauri::AppHandle;
 
-use super::protocol_feed::feed_protocol;
 use super::DataPlaneState;
+use super::protocol_feed::feed_protocol;
 use crate::decoder_feed::DecoderFeedCache;
 
 /// convert 链递归深度上限 (BytePlan 已保证 DAG, 此为防御性兜底)
@@ -41,21 +41,45 @@ pub struct RouteSummary {
 ///
 /// - `source_id`: 字节源节点 (设备节点 id / widget loopbackOut 所在 widget id)
 /// - `depth_hint`: 源端积压深度 (并行解析判定用; 命令注入路径传 0)
-/// - `app`: 自动通道检测的系统通知与 `protocol:channels-detected` 事件推送用
+/// - `sink`: 自动通道检测的系统通知与 `protocol:channels-detected` 事件推送用
 ///   (测试/无界面路径传 None, 跳过 emit 但 buffer 通道数对齐仍生效)
 pub async fn route_bytes(
     plane: &DataPlaneState,
-    app: Option<&AppHandle>,
+    sink: Option<&dyn BackendEventSink>,
     source_id: &str,
     data: &[u8],
     depth_hint: usize,
     dec_cache: &mut DecoderFeedCache,
     live: Option<&acquisition::LiveNodeHandle>,
 ) -> RouteSummary {
+    route_bytes_with_direction(
+        plane,
+        sink,
+        source_id,
+        data,
+        depth_hint,
+        dec_cache,
+        live,
+        can::CanDirection::Rx,
+    )
+    .await
+}
+
+/// Route bytes with an explicit CAN direction for send-loopback paths.
+pub async fn route_bytes_with_direction(
+    plane: &DataPlaneState,
+    sink: Option<&dyn BackendEventSink>,
+    source_id: &str,
+    data: &[u8],
+    depth_hint: usize,
+    dec_cache: &mut DecoderFeedCache,
+    live: Option<&acquisition::LiveNodeHandle>,
+    can_direction: can::CanDirection,
+) -> RouteSummary {
     let mut summary = RouteSummary::default();
     route_inner(
         plane,
-        app,
+        sink,
         source_id,
         data,
         depth_hint,
@@ -63,6 +87,7 @@ pub async fn route_bytes(
         &mut summary,
         0,
         live,
+        can_direction,
     )
     .await;
     summary
@@ -71,7 +96,7 @@ pub async fn route_bytes(
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn route_inner(
     plane: &DataPlaneState,
-    app: Option<&AppHandle>,
+    sink: Option<&dyn BackendEventSink>,
     source_id: &str,
     data: &[u8],
     depth_hint: usize,
@@ -79,6 +104,7 @@ pub(super) async fn route_inner(
     summary: &mut RouteSummary,
     depth: usize,
     live: Option<&acquisition::LiveNodeHandle>,
+    can_direction: can::CanDirection,
 ) {
     if depth > MAX_ROUTE_DEPTH {
         log::warn!("字节路由深度超限 ({}), 丢弃 {} 字节", source_id, data.len());
@@ -101,21 +127,29 @@ pub(super) async fn route_inner(
         _ => LOOPBACK_OUT_HANDLE.to_string(),
     };
     let port = recording::PortIdentity::new(source_id, source_handle);
-    if !data.is_empty() && plane.eval.recording.is_bound(&port) {
-        if let Err(error) = plane.eval.recording.record_next(
+    if !data.is_empty()
+        && plane.eval.recording.is_bound(&port)
+        && let Err(error) = plane.eval.recording.record_next(
             &port,
             plane.eval.execution.snapshot().epoch,
             vec![data_model::now_us()],
             recording::BatchPayload::Bytes {
                 data: data.to_vec(),
             },
-        ) {
-            log::error!("byte recording stopped accepting data: {error}");
-            return;
-        }
+        )
+    {
+        log::error!("byte recording stopped accepting data: {error}");
+        return;
     }
     // 路由表快照 (锁即刻释放, 下游分发不持 byte_plan 锁)
     let routes: Vec<_> = plane.byte_plan.lock().routes_for(source_id).to_vec();
+    // 活跃字节源无任何下游: 数据在此被静默丢弃 (连线缺失/图未同步), 显式可见
+    if routes.is_empty() && !data.is_empty() {
+        plane.warn_feed_gap_once(
+            &format!("no-route:{source_id}"),
+            &format!("字节源无任何下游路由, 数据被丢弃 (设备未连接到协议/解码节点): {source_id}"),
+        );
+    }
     // 路由去重组 (不变量 4): 同 (字节源, 协议配置等价) 的 Protocol 目标只解析
     // 一次, 帧经 Arc fan-out 到组内各节点。组缺失时 (尚未 sync) 退回逐目标。
     let groups = plane.route_groups.lock().get(source_id).cloned();
@@ -144,8 +178,18 @@ pub(super) async fn route_inner(
         // 每组只喂代表节点一次, 组员 fan-out
         for (_, repr, members) in &groups {
             feed_protocol(
-                plane, app, source_id, repr, members, data, depth_hint, dec_cache, summary, depth,
+                plane,
+                sink,
+                source_id,
+                repr,
+                members,
+                data,
+                depth_hint,
+                dec_cache,
+                summary,
+                depth,
                 live,
+                can_direction,
             )
             .await;
         }
@@ -162,7 +206,7 @@ pub(super) async fn route_inner(
             (NodeKind::Protocol { .. }, PROTOCOL_IN_HANDLE) => {
                 feed_protocol(
                     plane,
-                    app,
+                    sink,
                     source_id,
                     &route.target,
                     std::slice::from_ref(&route.target),
@@ -172,6 +216,7 @@ pub(super) async fn route_inner(
                     summary,
                     depth,
                     live,
+                    can_direction,
                 )
                 .await;
             }
@@ -219,7 +264,15 @@ async fn dispatch_non_protocol(
         }
         (NodeKind::Acquisition { .. }, TRANSPORT_TX_HANDLE) => {
             // 协议转换回注 / 命令发送落地 — try_lock 避免与 open 的长持锁互等
-            match plane.transport.send(target, data) {
+            let send_result = data_model::device_tree::NodeId::new(target)
+                .map_err(|_| {
+                    error::AppError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("invalid device node id: {target}"),
+                    ))
+                })
+                .and_then(|node_id| plane.transport.send(&node_id, data));
+            match send_result {
                 Ok(()) => summary.tx_sends += 1,
                 Err(e) => {
                     summary.tx_errors += 1;

@@ -5,9 +5,11 @@ import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Check, Copy } from 'lucide-react';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { platform } from '../../lib/platform';
+import { writeTextToClipboard } from '../../lib/utils/clipboard';
+import { splitStreamingMarkdown } from '../../lib/ai/streamMarkdown';
 import { useAppStore } from '../../store/appStore';
-import { t } from '../../i18n';
+import { translate } from '../../i18n';
 
 /// 从 hast 节点提取纯文本 — hljs 高亮会把代码拆成多个 span, 复制需还原原文
 function hastText(node: unknown): string {
@@ -18,17 +20,14 @@ function hastText(node: unknown): string {
   return '';
 }
 
-/// 代码块 — 语言标签 + 复制按钮 + 横向滚动
+/// 代码块 — 语言标签 + 复制按钮 + 面板内折行 (保留缩进, 不横向滚动)
 function CodeBlock({ lang, raw, children }: { lang: string; raw: string; children: ReactNode }) {
   const lang2 = useAppStore((s) => s.lang);
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(raw);
+    if (await writeTextToClipboard(raw)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
-    } catch {
-      /* 剪贴板不可用时静默 */
     }
   };
   return (
@@ -38,12 +37,12 @@ function CodeBlock({ lang, raw, children }: { lang: string; raw: string; childre
         <button
           className="ml-auto p-0.5 rounded text-text-secondary hover:bg-bg-hover hover:text-text-primary"
           onClick={() => void onCopy()}
-          title={t(lang2, 'aiCopy')}
+          title={translate('aiCopy', lang2)}
         >
           {copied ? <Check size={11} className="text-success" /> : <Copy size={11} />}
         </button>
       </div>
-      <pre className="p-2 overflow-x-auto text-[11px] leading-relaxed">{children}</pre>
+      <pre className="p-2 whitespace-pre-wrap break-words text-[11px] leading-relaxed">{children}</pre>
     </div>
   );
 }
@@ -71,7 +70,7 @@ const components: Components = {
       className="text-accent underline underline-offset-2 break-all cursor-pointer border-0 bg-transparent p-0 text-left"
       onClick={(e) => {
         e.preventDefault();
-        if (href) void openUrl(href);
+        if (href) void platform.openUrl(href);
       }}
     >
       {children}
@@ -90,14 +89,18 @@ const components: Components = {
     </blockquote>
   ),
   table: ({ children }) => (
-    <div className="overflow-x-auto my-1.5">
-      <table className="border-collapse text-[11px]">{children}</table>
+    <div className="my-1.5">
+      <table className="max-w-full border-collapse text-[11px]">{children}</table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="border border-border-subtle px-1.5 py-0.5 text-left font-medium">{children}</th>
+    <th className="border border-border-subtle px-1.5 py-0.5 text-left font-medium align-top break-words">
+      {children}
+    </th>
   ),
-  td: ({ children }) => <td className="border border-border-subtle px-1.5 py-0.5">{children}</td>,
+  td: ({ children }) => (
+    <td className="border border-border-subtle px-1.5 py-0.5 align-top break-words">{children}</td>
+  ),
   hr: () => <hr className="border-border-subtle my-1.5" />,
 };
 
@@ -110,5 +113,18 @@ export const AiMarkdown = memo(function AiMarkdown({ text }: { text: string }) {
         {text}
       </ReactMarkdown>
     </div>
+  );
+});
+
+/// 流式文本渲染 — 已完成前缀冻结 (memo 命中, 不再重解析), 只有活跃尾块随 token 重解析。
+///
+/// 切分规则见 `lib/ai/streamMarkdown`; 没有可用边界时退化成整段渲染, 与切分前一致。
+export const AiStreamingMarkdown = memo(function AiStreamingMarkdown({ text }: { text: string }) {
+  const { frozen, active } = splitStreamingMarkdown(text);
+  return (
+    <>
+      {frozen && <AiMarkdown text={frozen} />}
+      {active && <AiMarkdown text={active} />}
+    </>
   );
 });

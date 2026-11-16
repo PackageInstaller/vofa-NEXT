@@ -6,10 +6,9 @@
 //! v2 起支持「拆分备份」: 快照可只含若干分区 (BackupSection), 导入时按分区应用。
 //! 分区划分: 节点图 / 窗口组织 / 设置 / 传输与协议 / 控件与标签页。
 
-import { save, open } from '@tauri-apps/plugin-dialog';
-import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
-import { LazyStore } from '@tauri-apps/plugin-store';
+import { platform } from '../platform';
 import { canvasNode, nodeDocument, type NodeDocument } from '../nodes/document';
+import { deviceTreeCanvasNodes, walkDeviceTree } from '../acquisition/deviceTreeModel';
 import { edgeToGraphEdge } from '../utils/nodeDef';
 import type { GraphEdge } from '../utils/nodeDef';
 import { useAppStore } from '../../store/appStore';
@@ -30,7 +29,7 @@ import { setRawDataPreviewCapacity } from '../buffers/rawDataPreviewRegistry';
 import { canFrameBuffer } from '../buffers/canBuffer';
 import { logicSampleBuffer } from '../buffers/logicBuffer';
 import { notify, formatError } from './notifications';
-import { t } from '../../i18n';
+import { translate } from '../../i18n';
 import { removeTabGraphFromBackend } from '../../store/appStoreHelpers';
 import { getAllRawDataViewPrefs, useRawDataViewStore, type RawDataViewPrefs } from '../buffers/rawDataViewStore';
 
@@ -71,7 +70,7 @@ export async function saveJsonFile(
   data: unknown
 ): Promise<boolean> {
   try {
-    const path = await save({
+    const path = await platform.saveFile({
       defaultPath: `${filename}.json`,
       filters: JSON_FILTERS,
     });
@@ -79,7 +78,7 @@ export async function saveJsonFile(
     if (!path) return false;
     const text =
       typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-    await writeTextFile(path, text);
+    await platform.writeTextFile(path, text);
     return true;
   } catch (e) {
     console.warn('[appExport] 保存文件失败:', e);
@@ -90,19 +89,19 @@ export async function saveJsonFile(
 /** 通过系统"打开"对话框读取并解析备份文件; 用户取消/失败返回 null。 */
 export async function readSnapshotFromFile(): Promise<AppSnapshot | null> {
   try {
-    const selected: unknown = await open({
+    const selected = await platform.openFile({
       multiple: false,
       directory: false,
       filters: JSON_FILTERS,
     });
     if (!selected) return null;
-    const path: unknown = Array.isArray(selected) ? (selected as unknown[])[0] : selected;
+    const path = Array.isArray(selected) ? selected[0] : selected;
     if (typeof path !== 'string' || path === '') return null;
-    const json = await readTextFile(path);
+    const json = await platform.readTextFile(path);
     return parseSnapshot(json);
   } catch (e) {
     const lang = useAppStore.getState().lang;
-    notify.error(t(lang, 'backupImportFailed'), formatError(e), { source: 'importConfig' });
+    notify.error(translate('backupImportFailed', lang), formatError(e), { source: 'importConfig' });
     return null;
   }
 }
@@ -124,7 +123,7 @@ export function collectSnapshot(): AppSnapshot {
       tabs: app.controlTabs.map(({ id, name }) => ({ id, name })),
       graphs: app.controlTabs.map(tab => {
         const nodes = app.rfNodes.filter(n => n.data.tabId === tab.id);
-        const ids = new Set(nodes.map(n => n.id));
+        const ids = new Set([...nodes, ...deviceTreeCanvasNodes(nodes)].map(n => n.id));
         return { tab_id: tab.id, documents: nodes.map(nodeDocument),
           edges: app.rfEdges.filter(e => ids.has(e.source) && ids.has(e.target)).map(edgeToGraphEdge) };
       }),
@@ -163,7 +162,7 @@ export function serializeSnapshot(snap: AppSnapshot): string {
 }
 
 /// 解析备份 JSON 并做最小校验, 非法时抛出带清晰信息的 Error。
-/// 仅接受 v3 快照 (v1/v2 备份不再支持 — 请用新版本导出后重新备份)。
+/// 仅接受当前版本 (v4) 快照。
 export function parseSnapshot(json: string): AppSnapshot {
   let parsed: unknown;
   try {
@@ -203,16 +202,23 @@ function validateWorkspace(workspace: WorkspaceDocument): void {
   const tabs = new Set(workspace.tabs.map(tab => tab.id));
   if (tabs.size !== workspace.tabs.length || workspace.graphs.length !== tabs.size) throw new Error('工作区页签重复或缺少节点文档');
   const ids = new Set<string>();
+  const allTreeIds = new Set<string>();
   const graphTabs = new Set<string>();
   for (const graph of workspace.graphs) {
     if (!tabs.has(graph.tab_id) || graphTabs.has(graph.tab_id)) throw new Error('节点文档页签无效');
     graphTabs.add(graph.tab_id);
-    const localIds = new Set(graph.documents.map(doc => doc.id));
+    const localIds = new Set(graph.documents.flatMap(doc => doc.kind === 'device'
+      ? walkDeviceTree(doc.config.node).map(node => node.id) : [doc.id]));
+    if (localIds.size !== graph.documents.reduce((count, doc) => count + (doc.kind === 'device'
+      ? walkDeviceTree(doc.config.node).length : 1), 0)) throw new Error('设备树节点标识重复');
+    for (const id of localIds) {
+      if (allTreeIds.has(id)) throw new Error('设备树节点标识重复');
+      allTreeIds.add(id);
+    }
     for (const doc of graph.documents) {
       if (!doc.id || ids.has(doc.id) || doc.tabId !== graph.tab_id || !doc.label?.trim()) throw new Error('节点标识或页签归属无效');
       if (!Number.isFinite(doc.layout.x) || !Number.isFinite(doc.layout.y) ||
         [doc.layout.width, doc.layout.height].some(size => size != null && (!Number.isFinite(size) || size <= 0))) throw new Error('节点布局无效');
-      if (doc.kind !== 'device' && doc.attributes.testData) throw new Error('测试属性只能附加到设备');
       if (!['device', 'protocol', 'pointSelector', 'widget'].includes(doc.kind)) throw new Error('节点类型无效');
       canvasNode(doc);
       ids.add(doc.id);
@@ -228,7 +234,8 @@ function validateWorkspace(workspace: WorkspaceDocument): void {
 /// v3: 波形/原始数据容量按源 (节点) 生效，对当前图中全部 Protocol/设备节点应用
 function applyDataCapacity(settings: AppSettings) {
   const data = settings.data;
-  const nodes = useAppStore.getState().rfNodes;
+  const sourceNodes = useAppStore.getState().rfNodes;
+  const nodes = [...sourceNodes, ...deviceTreeCanvasNodes(sourceNodes)];
   for (const n of nodes) {
     if (n.type === 'protocol') {
       api.setWaveformBufferCapacity(n.id, data.waveformBufferPoints).catch((e: unknown) =>
@@ -258,20 +265,12 @@ function stripApiKey(settings: AppSettings): AppSettings {
 
 /// 恢复设置到 settings store, 并同步应用到磁盘 / 主题 / 容量
 async function applySettings(settings: AppSettings): Promise<void> {
-  // 导入文件中的密钥 (旧版备份) 迁入钥匙串, 不再落盘
-  if (settings.ai.apiKey) {
-    try {
-      await api.aiKeychainSet(settings.ai.adapter, settings.ai.apiKey);
-    } catch (e) {
-      console.warn('[appExport] 密钥迁入钥匙串失败:', e);
-    }
-  }
   useSettingsStore.setState({ settings });
   applyAppearance(settings.appearance);
   applyDataCapacity(settings);
   // 持久化到磁盘 (settings.json), 保证重启后仍生效
   try {
-    const store = new LazyStore('settings.json');
+    const store = platform.createStore('settings.json');
     await store.set('app', stripApiKey(settings));
   } catch (e) {
     console.warn('[appExport] 设置持久化失败:', e);
@@ -333,8 +332,7 @@ export async function applySnapshot(
 
   // 5. 窗口组织
   if (want.has('windowLayout') && snap.dockRoot && snap.dockCards) {
-    // 净化属性专属卡 — 旧备份可能在右侧属性卡混装其他数据 tab
-    // (旧版 reconcile 的安置缺陷), 导入时统一逐出/拆出
+    // 属性专属卡保持排他 — 右侧属性卡只放属性面板, 其他数据 tab 逐出/拆出
     const cleanDock = ensurePropertiesExclusiveCard(snap.dockRoot, snap.dockCards);
     useDockStore.setState({
       root: cleanDock.root,
@@ -358,13 +356,13 @@ export async function exportAppToFile(): Promise<void> {
     const json = serializeSnapshot(snap);
     const ok = await saveJsonFile('lissio-backup', json);
     if (ok) {
-      notify.info(t(lang, 'backupExportSuccess'), t(lang, 'backupExportSuccessDesc'), {
+      notify.info(translate('backupExportSuccess', lang), translate('backupExportSuccessDesc', lang), {
         source: 'exportConfig',
       });
     }
     // 用户取消时不提示
   } catch (e) {
-    notify.error(t(lang, 'backupExportFailed'), formatError(e), { source: 'exportConfig' });
+    notify.error(translate('backupExportFailed', lang), formatError(e), { source: 'exportConfig' });
   }
 }
 
@@ -379,12 +377,12 @@ export async function importAppFromFile(): Promise<void> {
     // 若当前有任一连接, 提示用户重新连接以应用导入的传输配置 (不自动连接)
     const isConnected = Object.values(useAppStore.getState().connectionStates).some((v) => v === 'Connected');
     notify.info(
-      t(lang, 'backupImportSuccess'),
-      isConnected ? t(lang, 'backupImportSuccessDescReconnect') : t(lang, 'backupImportSuccessDesc'),
+      translate('backupImportSuccess', lang),
+      isConnected ? translate('backupImportSuccessDescReconnect', lang) : translate('backupImportSuccessDesc', lang),
       { source: 'importConfig' }
     );
   } catch (e) {
-    notify.error(t(lang, 'backupImportFailed'), formatError(e), { source: 'importConfig' });
+    notify.error(translate('backupImportFailed', lang), formatError(e), { source: 'importConfig' });
   }
 }
 
@@ -395,13 +393,13 @@ export async function exportSectionsToFile(sections: BackupSection[]): Promise<b
     const snap = collectPartialSnapshot(sections);
     const ok = await saveJsonFile('lissio-backup', serializeSnapshot(snap));
     if (ok) {
-      notify.info(t(lang, 'backupExportSuccess'), t(lang, 'backupExportSuccessDesc'), {
+      notify.info(translate('backupExportSuccess', lang), translate('backupExportSuccessDesc', lang), {
         source: 'exportConfig',
       });
     }
     return ok;
   } catch (e) {
-    notify.error(t(lang, 'backupExportFailed'), formatError(e), { source: 'exportConfig' });
+    notify.error(translate('backupExportFailed', lang), formatError(e), { source: 'exportConfig' });
     return false;
   }
 }
@@ -417,13 +415,13 @@ export async function importSectionsFromFile(
     await applySnapshot(snap, sections ? { sections } : undefined);
     const isConnected = Object.values(useAppStore.getState().connectionStates).some((v) => v === 'Connected');
     notify.info(
-      t(lang, 'backupImportSuccess'),
-      isConnected ? t(lang, 'backupImportSuccessDescReconnect') : t(lang, 'backupImportSuccessDesc'),
+      translate('backupImportSuccess', lang),
+      isConnected ? translate('backupImportSuccessDescReconnect', lang) : translate('backupImportSuccessDesc', lang),
       { source: 'importConfig' }
     );
     return true;
   } catch (e) {
-    notify.error(t(lang, 'backupImportFailed'), formatError(e), { source: 'importConfig' });
+    notify.error(translate('backupImportFailed', lang), formatError(e), { source: 'importConfig' });
     return false;
   }
 }

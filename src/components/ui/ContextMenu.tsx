@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, cloneElement } from 'react';
+import { useMotionPresence } from '../../lib/motion';
 import { useContextMenuStore } from '../../store/contextMenuStore';
+import { useGlassSurface } from '../../lib/glass/useGlassSurface';
+import { useGlassAppearance } from '../../lib/hooks/useGlassAppearance';
 import type { ContextMenuItem, ContextMenuEntry } from '../../types';
 
 const MENU_ITEM_HEIGHT = 26;
@@ -12,6 +15,8 @@ function isSeparator(entry: ContextMenuEntry): entry is { kind: 'separator' } {
 export function ContextMenu() {
   const { visible, x, y, items, close } = useContextMenuStore();
   const menuRef = useRef<HTMLDivElement>(null);
+  useMotionPresence(menuRef, { variant: 'popover', enabled: visible });
+  const glass = useGlassSurface({ role: 'floating', appearance: useGlassAppearance() });
   const positionRef = useRef({ x, y });
 
   // 记录最近一次请求的坐标，避免尺寸测量期间 state 已变
@@ -59,19 +64,35 @@ export function ContextMenu() {
 
     const handleClose = () => close();
 
+    // 只有**视口自身**滚动才让菜单失效: 菜单是 fixed 定位, 锚点跟视口走。
+    // 元素级滚动一律不关 — 工作区运行中数据面板每帧写 scrollTop (跟随最新),
+    // 捕获阶段的 window 监听会把刚弹出的菜单在同一帧内关掉 (未及绘制),
+    // 表现就是"运行时右键完全没反应", 连原生菜单也被 preventDefault 挡掉。
+    const handleScroll = (e: Event) => {
+      const target = e.target;
+      if (
+        target === document ||
+        target === window ||
+        target === document.documentElement ||
+        target === document.scrollingElement
+      ) {
+        close();
+      }
+    };
+
     // 使用 capture 阶段，避免被下层 stopPropagation 漏掉
     window.addEventListener('pointerdown', handlePointer, true);
     window.addEventListener('mousedown', handlePointer, true);
     window.addEventListener('keydown', handleKey, true);
     window.addEventListener('resize', handleClose, true);
-    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('scroll', handleScroll, true);
 
     return () => {
       window.removeEventListener('pointerdown', handlePointer, true);
       window.removeEventListener('mousedown', handlePointer, true);
       window.removeEventListener('keydown', handleKey, true);
       window.removeEventListener('resize', handleClose, true);
-      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('scroll', handleScroll, true);
     };
   }, [visible, close]);
 
@@ -89,8 +110,12 @@ export function ContextMenu() {
 
   return (
     <div
-      ref={menuRef}
-      className="context-menu"
+      ref={(el) => {
+        menuRef.current = el;
+        glass.ref(el);
+      }}
+      className="context-menu popover-surface motion-float"
+      data-glass-tier={glass.tier}
       style={{
         position: 'fixed',
         left: x,
@@ -110,7 +135,7 @@ export function ContextMenu() {
             key={id}
             type="button"
             disabled={disabled}
-            className={`context-menu-item ${disabled ? 'disabled' : ''}`}
+            className={`context-menu-item motion-row ${disabled ? 'disabled' : ''}`}
             style={{ height: MENU_ITEM_HEIGHT }}
             onClick={handleItemClick(entry)}
           >

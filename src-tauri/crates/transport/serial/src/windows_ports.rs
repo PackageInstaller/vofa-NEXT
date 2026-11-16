@@ -1,18 +1,18 @@
-//! Windows 串口 Description 枚举
+//! Windows 串口系统友好名称与设备描述枚举
 //!
 //! `serialport` crate 的 UsbPortInfo 只暴露 product/manufacturer/serial_number，
-//! 不读取设备管理器中的 Description (SPDRP_DEVICEDESC)。本模块使用 SetupAPI
-//! 自行枚举 Ports / Modem 两类设备，建立 `COM端口名 -> Description` 映射。
+//! 本模块使用 SetupAPI 枚举 Ports / Modem 两类设备，优先读取 FriendlyName，
+//! 回退到 Description，建立 `COM端口名 -> 系统描述` 映射。
 
 use std::collections::HashMap;
-use windows_sys::core::GUID;
 use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
-    SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInfo, SetupDiGetClassDevsW,
-    SetupDiGetDeviceRegistryPropertyW, SetupDiOpenDevRegKey, DICS_FLAG_GLOBAL, DIGCF_PRESENT,
-    DIREG_DEV, SPDRP_DEVICEDESC, SP_DEVINFO_DATA,
+    DICS_FLAG_GLOBAL, DIGCF_PRESENT, DIREG_DEV, SP_DEVINFO_DATA, SPDRP_DEVICEDESC,
+    SPDRP_FRIENDLYNAME, SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInfo, SetupDiGetClassDevsW,
+    SetupDiGetDeviceRegistryPropertyW, SetupDiOpenDevRegKey,
 };
 use windows_sys::Win32::Foundation::{BOOL, ERROR_SUCCESS, HWND, INVALID_HANDLE_VALUE};
-use windows_sys::Win32::System::Registry::{RegCloseKey, RegQueryValueExW, HKEY, KEY_READ};
+use windows_sys::Win32::System::Registry::{HKEY, KEY_READ, RegCloseKey, RegQueryValueExW};
+use windows_sys::core::GUID;
 
 /// 设备类 GUID: Ports (COM & LPT ports)
 const GUID_DEVCLASS_PORTS: GUID = GUID {
@@ -32,8 +32,7 @@ const GUID_DEVCLASS_MODEM: GUID = GUID {
 
 /// 读取设备管理器中的 Description，建立端口名映射。
 ///
-/// 非 Windows 平台由 `#[cfg(windows)]` 控制，不会编译本文件；
-/// 为保持接口一致，这里仍提供一个空映射的桩函数占位说明。
+/// Prefer the localized Device Manager friendly name, then the device description.
 pub fn port_descriptions() -> HashMap<String, String> {
     let mut map = HashMap::new();
 
@@ -47,7 +46,8 @@ pub fn port_descriptions() -> HashMap<String, String> {
             }
 
             let mut dev_info = SP_DEVINFO_DATA {
-                cbSize: std::mem::size_of::<SP_DEVINFO_DATA>() as u32,
+                cbSize: u32::try_from(std::mem::size_of::<SP_DEVINFO_DATA>())
+                    .expect("SP_DEVINFO_DATA 的 cbSize 远小于 u32 上限"),
                 ClassGuid: GUID {
                     data1: 0,
                     data2: 0,
@@ -59,19 +59,19 @@ pub fn port_descriptions() -> HashMap<String, String> {
             };
 
             let mut index = 0u32;
-            while SetupDiEnumDeviceInfo(info_set, index, &mut dev_info) != 0 {
+            while SetupDiEnumDeviceInfo(info_set, index, &raw mut dev_info) != 0 {
                 index += 1;
 
                 // 打开设备注册表键，读取 PortName
                 let hkey = SetupDiOpenDevRegKey(
                     info_set,
-                    &mut dev_info,
+                    &raw const dev_info,
                     DICS_FLAG_GLOBAL,
                     0,
                     DIREG_DEV,
                     KEY_READ,
                 );
-                if hkey == 0 {
+                if hkey == INVALID_HANDLE_VALUE {
                     continue;
                 }
 
@@ -89,11 +89,15 @@ pub fn port_descriptions() -> HashMap<String, String> {
                     continue;
                 }
 
-                // 读取 SPDRP_DEVICEDESC
-                if let Some(description) = read_device_description(info_set, &mut dev_info) {
-                    if !description.is_empty() {
-                        map.insert(port_name, description);
-                    }
+                // 优先读取设备管理器的友好名称。
+                if let Some(description) =
+                    read_device_description(info_set, &raw const dev_info, SPDRP_FRIENDLYNAME)
+                        .or_else(|| {
+                            read_device_description(info_set, &raw const dev_info, SPDRP_DEVICEDESC)
+                        })
+                    && !description.is_empty()
+                {
+                    map.insert(port_name.to_ascii_uppercase(), description);
                 }
             }
 
@@ -114,27 +118,31 @@ unsafe fn read_reg_string(hkey: HKEY, value_name: &str) -> Option<String> {
     let mut buf_len: u32 = 0;
     let mut value_type: u32 = 0;
 
-    let ret = RegQueryValueExW(
-        hkey,
-        name_wide.as_ptr(),
-        std::ptr::null_mut(),
-        &mut value_type,
-        std::ptr::null_mut(),
-        &mut buf_len,
-    );
+    let ret = unsafe {
+        RegQueryValueExW(
+            hkey,
+            name_wide.as_ptr(),
+            std::ptr::null(),
+            &raw mut value_type,
+            std::ptr::null_mut(),
+            &raw mut buf_len,
+        )
+    };
     if ret != ERROR_SUCCESS || buf_len == 0 {
         return None;
     }
 
     let mut buf: Vec<u8> = vec![0; buf_len as usize];
-    let ret = RegQueryValueExW(
-        hkey,
-        name_wide.as_ptr(),
-        std::ptr::null_mut(),
-        &mut value_type,
-        buf.as_mut_ptr(),
-        &mut buf_len,
-    );
+    let ret = unsafe {
+        RegQueryValueExW(
+            hkey,
+            name_wide.as_ptr(),
+            std::ptr::null(),
+            &raw mut value_type,
+            buf.as_mut_ptr(),
+            &raw mut buf_len,
+        )
+    };
     if ret != ERROR_SUCCESS {
         return None;
     }
@@ -144,12 +152,7 @@ unsafe fn read_reg_string(hkey: HKEY, value_name: &str) -> Option<String> {
         return None;
     }
 
-    let wide: &[u16] = std::slice::from_raw_parts(
-        buf.as_ptr() as *const u16,
-        (buf_len as usize) / std::mem::size_of::<u16>(),
-    );
-    let end = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
-    String::from_utf16(&wide[..end]).ok()
+    decode_reg_string(buf.get(..buf_len as usize)?)
 }
 
 /// 读取 SPDRP_DEVICEDESC 属性
@@ -159,34 +162,39 @@ unsafe fn read_reg_string(hkey: HKEY, value_name: &str) -> Option<String> {
 /// `dev_info` 必须是经 `SetupDiEnumDeviceInfo` 成功填充的结构。
 unsafe fn read_device_description(
     info_set: isize,
-    dev_info: &mut SP_DEVINFO_DATA,
+    dev_info: *const SP_DEVINFO_DATA,
+    property: u32,
 ) -> Option<String> {
     let mut data_type: u32 = 0;
     let mut buf_len: u32 = 0;
 
-    let ok: BOOL = SetupDiGetDeviceRegistryPropertyW(
-        info_set,
-        dev_info,
-        SPDRP_DEVICEDESC,
-        &mut data_type,
-        std::ptr::null_mut(),
-        0,
-        &mut buf_len,
-    );
+    let ok: BOOL = unsafe {
+        SetupDiGetDeviceRegistryPropertyW(
+            info_set,
+            dev_info,
+            property,
+            &raw mut data_type,
+            std::ptr::null_mut(),
+            0,
+            &raw mut buf_len,
+        )
+    };
     if ok == 0 && buf_len == 0 {
         return None;
     }
 
     let mut buf: Vec<u8> = vec![0; buf_len as usize];
-    let ok = SetupDiGetDeviceRegistryPropertyW(
-        info_set,
-        dev_info,
-        SPDRP_DEVICEDESC,
-        &mut data_type,
-        buf.as_mut_ptr(),
-        buf_len,
-        &mut buf_len,
-    );
+    let ok = unsafe {
+        SetupDiGetDeviceRegistryPropertyW(
+            info_set,
+            dev_info,
+            property,
+            &raw mut data_type,
+            buf.as_mut_ptr(),
+            buf_len,
+            &raw mut buf_len,
+        )
+    };
     if ok == 0 {
         return None;
     }
@@ -196,10 +204,25 @@ unsafe fn read_device_description(
         return None;
     }
 
-    let wide: &[u16] = std::slice::from_raw_parts(
-        buf.as_ptr() as *const u16,
-        (buf_len as usize) / std::mem::size_of::<u16>(),
-    );
-    let end = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
-    String::from_utf16(&wide[..end]).ok()
+    decode_reg_string(buf.get(..buf_len as usize)?)
 }
+
+fn decode_reg_string(bytes: &[u8]) -> Option<String> {
+    let (pairs, remainder) = bytes.as_chunks::<2>();
+    if !remainder.is_empty() {
+        // 奇数长度不可能是完整的 UTF-16 缓冲, 视为损坏数据
+        return None;
+    }
+    let wide: Vec<u16> = pairs
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair))
+        .take_while(|value| *value != 0)
+        .collect();
+    String::from_utf16(&wide)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+}
+
+#[cfg(test)]
+#[path = "windows_ports_tests.rs"]
+mod tests;

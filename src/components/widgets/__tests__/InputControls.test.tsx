@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
+import { renderWithI18n } from '../../../test/renderWithI18n';;
 import { useAppStore } from '../../../store/appStore';
 import { selectWidgets } from '../../../store/appStoreHelpers';
-import { createWidget, widgetInputValue } from '../../../lib/utils/widgetDefaults';
+import { widgetInputValue } from '../../../lib/utils/widgetValue';
+import { widgetFixture } from '../../../test/widgetFixtures';
 import { Knob } from '../knob/KnobWidget';
 import { Slider } from '../slider/SliderWidget';
 import { Radio } from '../radio/RadioWidget';
@@ -29,10 +31,10 @@ const widgetNodeOf = (widget: { kind: string; params: { id: string } }) => ({
 
 describe('numeric input controls', () => {
   it('previews slider changes without persisting, then commits on release', () => {
-    const widget = createWidget('Slider');
+    const widget = widgetFixture('Slider');
     if (widget.kind !== 'Slider') throw new Error('expected Slider');
     useAppStore.setState({ rfNodes: [widgetNodeOf(widget)] });
-    render(<Slider widget={widget} />);
+    renderWithI18n(<Slider widget={widget} />);
 
     const range = screen.getByRole('slider');
     expect(range).toHaveClass('nodrag', 'nowheel');
@@ -46,10 +48,10 @@ describe('numeric input controls', () => {
   });
 
   it('supports relative pointer dragging on the knob', () => {
-    const widget = createWidget('Knob');
+    const widget = widgetFixture('Knob');
     if (widget.kind !== 'Knob') throw new Error('expected Knob');
     useAppStore.setState({ rfNodes: [widgetNodeOf(widget)] });
-    render(<Knob widget={widget} />);
+    renderWithI18n(<Knob widget={widget} />);
     const knob = screen.getByRole('slider');
 
     fireEvent.pointerDown(knob, { pointerId: 1, clientY: 100 });
@@ -60,10 +62,44 @@ describe('numeric input controls', () => {
     expect((selectWidgets(useAppStore.getState())[0] as typeof widget).params.value).toBe(preview);
   });
 
+  it('拖过 120px 走完整个量程 — 12px 对应 10% 而非整个量程', () => {
+    const widget = widgetFixture('Knob');
+    if (widget.kind !== 'Knob') throw new Error('expected Knob');
+    useAppStore.setState({ rfNodes: [widgetNodeOf(widget)] });
+    renderWithI18n(<Knob widget={widget} />);
+    const knob = screen.getByRole('slider');
+
+    // 量程 0-100, 起值 50: 向上 12px = 10% = 60。
+    // 若误用档位旋钮的 12px/档比例, 12px 会当成走完整个量程 → 被截到 100。
+    fireEvent.pointerDown(knob, { pointerId: 1, clientY: 200 });
+    fireEvent.pointerMove(knob, { pointerId: 1, clientY: 188 });
+    expect(useAppStore.getState().inputPreviewValues[widget.params.id]).toBe(60);
+
+    // 继续拖到 60px = 50% → 100 (截断)
+    fireEvent.pointerMove(knob, { pointerId: 1, clientY: 140 });
+    expect(useAppStore.getState().inputPreviewValues[widget.params.id]).toBe(100);
+  });
+
+  it('另一根手指按在旋钮上时移动不改值 — 多指同时按下不该跳值', () => {
+    const widget = widgetFixture('Knob');
+    if (widget.kind !== 'Knob') throw new Error('expected Knob');
+    useAppStore.setState({ rfNodes: [widgetNodeOf(widget)] });
+    renderWithI18n(<Knob widget={widget} />);
+    const knob = screen.getByRole('slider');
+
+    fireEvent.pointerDown(knob, { pointerId: 1, clientY: 200 });
+    fireEvent.pointerMove(knob, { pointerId: 2, clientY: 40 });
+    expect(useAppStore.getState().inputPreviewValues[widget.params.id]).toBeUndefined();
+
+    // 发起手势的那根指针照常生效
+    fireEvent.pointerMove(knob, { pointerId: 1, clientY: 188 });
+    expect(useAppStore.getState().inputPreviewValues[widget.params.id]).toBe(60);
+  });
+
   it('commits manual input once on Enter and keeps invalid drafts visible', () => {
     const onCommit = vi.fn();
     const onPreview = vi.fn();
-    const view = render(<NumericValueInput value={50} min={0} max={100} step={1} onPreview={onPreview} onCommit={onCommit} />);
+    const view = renderWithI18n(<NumericValueInput value={50} min={0} max={100} step={1} onPreview={onPreview} onCommit={onCommit} />);
     const input = screen.getByRole('spinbutton');
 
     fireEvent.focus(input);
@@ -84,10 +120,10 @@ describe('numeric input controls', () => {
   });
 
   it('rotates during number-stepper changes and commits once on release', () => {
-    const widget = createWidget('Knob');
+    const widget = widgetFixture('Knob');
     if (widget.kind !== 'Knob') throw new Error('expected Knob');
     useAppStore.setState({ rfNodes: [widgetNodeOf(widget)] });
-    render(<Knob widget={widget} />);
+    renderWithI18n(<Knob widget={widget} />);
     const knob = screen.getByRole('slider');
     const input = screen.getByRole('spinbutton');
 
@@ -105,10 +141,10 @@ describe('numeric input controls', () => {
 
 describe('choice input controls', () => {
   it('persists radio selection by stable option id', () => {
-    const widget = createWidget('Radio');
+    const widget = widgetFixture('Radio');
     if (widget.kind !== 'Radio') throw new Error('expected Radio');
     useAppStore.setState({ rfNodes: [widgetNodeOf(widget)] });
-    render(<Radio widget={widget} />);
+    renderWithI18n(<Radio widget={widget} />);
     fireEvent.click(screen.getByLabelText('B'));
     const stored = selectWidgets(useAppStore.getState())[0];
     expect(stored.kind).toBe('Radio');
@@ -118,10 +154,10 @@ describe('choice input controls', () => {
   });
 
   it('renders a true multi-select and sums selected values', () => {
-    const widget = createWidget('Checkbox');
+    const widget = widgetFixture('Checkbox');
     if (widget.kind !== 'Checkbox') throw new Error('expected Checkbox');
     useAppStore.setState({ rfNodes: [widgetNodeOf(widget)] });
-    const view = render(<Checkbox widget={widget} />);
+    const view = renderWithI18n(<Checkbox widget={widget} />);
     fireEvent.click(screen.getByLabelText('A'));
     view.rerender(<Checkbox widget={selectWidgets(useAppStore.getState())[0] as typeof widget} />);
     fireEvent.click(screen.getByLabelText('B'));

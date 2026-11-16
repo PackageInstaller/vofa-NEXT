@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use can::CanFrame;
-use protocol::{split_at_boundaries, FeedOutput, ProtocolEngine};
+use protocol::{FeedOutput, ProtocolEngine, split_at_boundaries};
 
 /// candleLight (GSUSB) 二进制帧大小 (字节)
 pub const CAND_FRAME_SIZE: usize = 24;
@@ -112,12 +112,11 @@ impl ProtocolEngine for CandleEngine {
     }
 
     fn encode_channel(&mut self, _channel: usize, value: f32) -> Vec<u8> {
-        format!("{value:.6}\n").into_bytes()
+        protocol::text::encode_ascii_value(value)
     }
 
     fn encode_channels(&mut self, values: &[f32]) -> Vec<u8> {
-        let s: Vec<String> = values.iter().map(|v| format!("{v:.6}")).collect();
-        format!("{}\n", s.join(",")).into_bytes()
+        protocol::text::encode_ascii_values(values)
     }
 
     fn name(&self) -> &'static str {

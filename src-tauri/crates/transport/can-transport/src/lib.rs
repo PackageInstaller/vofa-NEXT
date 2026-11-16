@@ -8,7 +8,8 @@ pub mod slcan;
 
 use acquisition::{TransportBackend, TransportConnection};
 use async_trait::async_trait;
-use data_model::{Result, TransportConfig};
+use data_model::TransportConfig;
+use error::Result;
 use schema_types::TestDataLink;
 
 /// CAN device adapter. SLCAN and candleLight differ only behind this factory;
@@ -24,11 +25,26 @@ impl TransportBackend for CanTransportBackend {
         if matches!(config, TransportConfig::Slcan(_)) {
             return acquisition::TransportBackend::discover(&serial::SerialBackend, config);
         }
-        Ok(candle::list_devices()?.into_iter().map(|device| acquisition::DiscoveredEndpoint {
-            adapter_id: data_model::device::DriverId("candle-light".into()),
-            discovery_id: format!("{}:{}", device.bus, device.address),
-            display_name: device.product.unwrap_or_else(|| format!("USB {}:{}", device.bus, device.address)),
-            configuration_patch: serde_json::json!({ "bus": device.bus, "address": device.address }), metadata: std::collections::BTreeMap::new(),
+        Ok(candle::list_devices()?.into_iter().map(|device| {
+            let mut metadata = std::collections::BTreeMap::new();
+            metadata.insert("vid".into(), serde_json::json!(device.vid));
+            metadata.insert("pid".into(), serde_json::json!(device.pid));
+            if let Some(value) = &device.serial_number {
+                metadata.insert("serialNumber".into(), serde_json::json!(value));
+            }
+            if let Some(value) = &device.manufacturer {
+                metadata.insert("manufacturer".into(), serde_json::json!(value));
+            }
+            if let Some(value) = &device.product {
+                metadata.insert("product".into(), serde_json::json!(value));
+            }
+            acquisition::DiscoveredEndpoint {
+                adapter_id: data_model::device::DriverId("candle-light".into()),
+                discovery_id: format!("{}:{}", device.bus, device.address),
+                display_name: device.product.clone().unwrap_or_else(|| format!("USB {}:{}", device.bus, device.address)),
+                configuration_patch: serde_json::json!({ "bus": device.bus, "address": device.address }),
+                metadata,
+            }
         }).collect())
     }
     fn name(&self) -> &'static str {

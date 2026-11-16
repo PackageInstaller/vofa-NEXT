@@ -1,5 +1,7 @@
-import { Channel, invoke } from '@tauri-apps/api/core';
-import { closeTauriChannel } from '../tauri/tauri';
+import { transport } from '../rpc';
+import { errorText } from '../../types/errors';
+import { subscribeDisplayTransport } from '../rpc/livePushGate';
+import type { SubscriptionHandle } from '../rpc/types';
 import {
   decodeSampleEnvelope,
   type DecodedSampleBatch,
@@ -22,7 +24,7 @@ interface Entry {
   key: string;
   sourceNodeId: string;
   sourceHandle: string;
-  channel: Channel<ArrayBuffer> | null;
+  subscription: SubscriptionHandle | null;
   listeners: Set<() => void>;
   snapshot: PortSampleSnapshot;
   generation: number;
@@ -53,6 +55,8 @@ const entries = new Map<string, Entry>();
 // subscribe/getSnapshot 引用稳定, 若每次调用都新建 facade, React 会在每次渲染后
 // 退订/重订阅, 叠加 start() 同步替换快照, 形成 "Maximum update depth" 死循环。
 const stores = new Map<string, PortSampleStore>();
+const IDLE_STORE_MS = 1_000;
+const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 const INVALID_PORT_STORE: PortSampleStore = {
   subscribe: () => () => { return undefined; },
@@ -60,6 +64,7 @@ const INVALID_PORT_STORE: PortSampleStore = {
   clear: () => { return undefined; },
 };
 let decoderWorker: Worker | null | undefined;
+let nextGeneration = 0;
 
 function topicKey(sourceNodeId: string, sourceHandle: string): string {
   return `${sourceNodeId}\u0000${sourceHandle}`;
@@ -138,13 +143,18 @@ function updateEntry(
     };
   }
   for (const listener of entry.listeners) listener();
-  if (batch && entry.channel) {
-    void invoke('ack_data', {
-      subscriptionId: entry.channel.id,
-      sequence: batch.sequence,
-      bufferedBytes: batch.byteLength,
-      renderMs: elapsedMs + performance.now() - start,
-    });
+  // 背压反馈: 订阅 id 由出口分配, 但流帧到达时必定已就绪 (见 SubscriptionHandle.id)
+  const subscriptionId = entry.subscription?.id;
+  if (batch && subscriptionId != null) {
+    // 反馈失败不影响渲染 — 后端只把它当节流参考
+    void transport
+      .call('ack_data', {
+        subscriptionId,
+        sequence: batch.sequence,
+        bufferedBytes: batch.byteLength,
+        renderMs: elapsedMs + performance.now() - start,
+      })
+      .catch(() => undefined);
   }
 }
 
@@ -174,7 +184,7 @@ function dispatchPendingDecode(entry: Entry) {
       updateEntry(
         entry,
         undefined,
-        error instanceof Error ? error.message : String(error),
+        errorText(error),
       );
     }
     return;
@@ -199,8 +209,8 @@ function enqueueDecode(entry: Entry, job: DecodeJob) {
 }
 
 function start(entry: Entry) {
-  if (entry.channel || entry.startingGeneration !== null) return;
-  const generation = entry.generation + 1;
+  if (entry.subscription || entry.startingGeneration !== null) return;
+  const generation = ++nextGeneration;
   entry.generation = generation;
   entry.startingGeneration = generation;
   entry.localPreviewSkipped = 0;
@@ -208,50 +218,62 @@ function start(entry: Entry) {
     ...EMPTY_SNAPSHOT,
     version: entry.snapshot.version + 1,
   };
-  const channel = new Channel<ArrayBuffer>();
-  entry.channel = channel;
-  channel.onmessage = (message) => {
-    if (entry.generation !== generation || entry.channel !== channel) return;
-    const buffer = normalizeBuffer(message);
-    enqueueDecode(entry, { buffer, generation, receivedAt: performance.now() });
-  };
-  void invoke('subscribe_data', {
-    request: {
+  const subscription = subscribeDisplayTransport<ArrayBuffer>(
+    {
       kind: 'port_samples',
       source_node_id: entry.sourceNodeId,
       source_handle: entry.sourceHandle,
     },
-    onEvent: channel,
-    intervalMs: 17,
-    maxItems: MAX_PREVIEW_ROWS,
-  })
-    .catch((error: unknown) => {
-      if (entry.generation === generation) {
-        updateEntry(entry, undefined, String(error));
-      }
-    })
-    .finally(() => {
-      if (entry.startingGeneration === generation) {
-        entry.startingGeneration = null;
-      }
-      if (
-        entry.generation !== generation ||
-        entry.channel !== channel ||
-        entry.listeners.size === 0
-      ) {
-        void closeTauriChannel(channel, 'unsubscribe_data', channel.id);
-      }
-      if (entry.listeners.size > 0 && !entry.channel) start(entry);
-    });
+    (message) => {
+      if (entry.generation !== generation || entry.subscription !== subscription) return;
+      const buffer = normalizeBuffer(message);
+      enqueueDecode(entry, { buffer, generation, receivedAt: performance.now() });
+    },
+    {
+      intervalMs: 17,
+      maxItems: MAX_PREVIEW_ROWS,
+      onError: (error) => {
+        if (entry.generation === generation) {
+          updateEntry(entry, undefined, errorText(error));
+        }
+      },
+    },
+  );
+  entry.subscription = subscription;
+  // 建立是异步的: 期间可能被 stop() 取消, 也可能有新的监听者挂上来。
+  // 取消由出口负责注销, 这里只需在建立结束后收回守卫并按需重订。
+  void subscription.settled.then(() => {
+    if (entry.startingGeneration === generation) {
+      entry.startingGeneration = null;
+    }
+    if (entry.listeners.size > 0 && !entry.subscription) start(entry);
+  });
 }
 
 function stop(entry: Entry) {
-  entry.generation++;
+  entry.generation = ++nextGeneration;
   entry.startingGeneration = null;
   entry.pendingDecode = null;
-  const channel = entry.channel;
-  entry.channel = null;
-  if (channel) void closeTauriChannel(channel, 'unsubscribe_data', channel.id);
+  const subscription = entry.subscription;
+  entry.subscription = null;
+  subscription?.cancel();
+}
+
+function cancelIdleCleanup(key: string) {
+  const timer = idleTimers.get(key);
+  if (timer === undefined) return;
+  clearTimeout(timer);
+  idleTimers.delete(key);
+}
+
+function scheduleIdleCleanup(key: string, entry: Entry, store: PortSampleStore) {
+  cancelIdleCleanup(key);
+  idleTimers.set(key, setTimeout(() => {
+    idleTimers.delete(key);
+    if (entry.listeners.size > 0 || stores.get(key) !== store) return;
+    entries.delete(key);
+    stores.delete(key);
+  }, IDLE_STORE_MS));
 }
 
 export interface PortSampleStore {
@@ -268,7 +290,7 @@ export function getPortSampleStore(
     return INVALID_PORT_STORE;
   }
   const key = topicKey(sourceNodeId, sourceHandle);
-  let store = stores.get(key);
+  const store = stores.get(key);
   if (store) return store;
   let entry = entries.get(key);
   if (!entry) {
@@ -276,7 +298,7 @@ export function getPortSampleStore(
       key,
       sourceNodeId,
       sourceHandle,
-      channel: null,
+      subscription: null,
       listeners: new Set(),
       snapshot: EMPTY_SNAPSHOT,
       generation: 0,
@@ -288,17 +310,35 @@ export function getPortSampleStore(
     entries.set(key, entry);
   }
   const target = entry;
-  store = {
+  const facade: PortSampleStore = {
     subscribe(listener) {
+      const current = stores.get(key);
+      if (current && current !== facade) return current.subscribe(listener);
+      if (!current) {
+        stores.set(key, facade);
+        entries.set(key, target);
+      }
+      cancelIdleCleanup(key);
       target.listeners.add(listener);
       if (target.listeners.size === 1) start(target);
       return () => {
         target.listeners.delete(listener);
-        if (target.listeners.size === 0) stop(target);
+        if (target.listeners.size === 0) {
+          stop(target);
+          scheduleIdleCleanup(key, target, facade);
+        }
       };
     },
-    getSnapshot: () => target.snapshot,
+    getSnapshot: () => {
+      const current = stores.get(key);
+      return current && current !== facade ? current.getSnapshot() : target.snapshot;
+    },
     clear() {
+      const current = stores.get(key);
+      if (current && current !== facade) {
+        current.clear();
+        return;
+      }
       target.snapshot = {
         ...EMPTY_SNAPSHOT,
         version: target.snapshot.version + 1,
@@ -306,8 +346,9 @@ export function getPortSampleStore(
       for (const listener of target.listeners) listener();
     },
   };
-  stores.set(key, store);
-  return store;
+  stores.set(key, facade);
+  scheduleIdleCleanup(key, target, facade);
+  return facade;
 }
 
 export function resetPortSampleStoresForSource(sourceNodeId: string): void {

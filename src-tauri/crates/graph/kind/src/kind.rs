@@ -22,12 +22,12 @@ use crate::str_op::{StrNumParams, StrOp};
 /// 节点种类 — 决定节点如何被评估
 ///
 /// 注意：不派生 `PartialEq`（`TransportConfig`/`ProtocolConfig` 未实现 `PartialEq`）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "kind", content = "params")]
 pub enum NodeKind {
     /// Typed device source; the endpoint configuration owns its identity.
     Acquisition {
-        spec: data_model::device::EndpointSpec,
+        node: data_model::device_tree::NodeDecl,
         ports: Vec<data_model::device::DevicePort>,
     },
     /// Explicit typed point-to-numeric projection.
@@ -35,22 +35,20 @@ pub enum NodeKind {
     /// 协议引擎节点（字节平面，全局）
     /// 输入端口 "in"（Bytes），输出端口 "out"（Bytes）
     /// `convert_to`：可选的协议转换目标配置
-    /// `schema`：可选的帧 schema（协议引擎统一为 schema 模型；`None` = 旧前端，按 config 构造引擎）
+    /// `schema`：帧 schema（协议引擎统一由 schema 编译）
     Protocol {
         config: ProtocolConfig,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         convert_to: Option<ProtocolConfig>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        schema: Option<ProtocolSchema>,
+        schema: ProtocolSchema,
     },
     /// 协议帧源（数值平面）— 引用某个全局 Protocol 节点的最新帧
     /// 输出端口默认 `"ch0".."chN"`（F32），求值时从 `source_frames[node_id]` 读取
-    /// `port_names`：可选命名端口（schema 模型的端口名；None/空 = 缺省 ch0..chN）
+    /// `port_names`：命名端口（schema 模型的端口名；空 = 缺省 ch0..chN）
     ProtocolSource {
         node_id: String,
         channels: usize,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        port_names: Option<Vec<String>>,
+        port_names: Vec<String>,
     },
     /// 输入控件（Knob/Slider/Button/Radio/Checkbox）
     /// 输出端口固定 "value"，值来自前端 `invoke('set_input_value')`
@@ -137,7 +135,7 @@ pub enum NodeKind {
 }
 
 /// 文本下发换行模式 — 发送时附加到文本末尾
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum NewlineMode {
     #[default]
@@ -175,65 +173,5 @@ pub fn is_raw_data_handle(handle: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ports::PortDomain;
-
-    #[test]
-    fn protocol_schema_and_port_names_default_compat() {
-        // 旧前端：Protocol 无 schema 字段 / ProtocolSource 无 port_names 字段 → serde default 兼容
-        let json = r#"{"kind":"Protocol","params":{"config":{"kind":"RawData"}}}"#;
-        let kind: NodeKind = serde_json::from_str(json).expect("旧 Protocol 数据应反序列化成功");
-        match kind {
-            NodeKind::Protocol {
-                schema, convert_to, ..
-            } => {
-                assert!(schema.is_none());
-                assert!(convert_to.is_none());
-            }
-            other => panic!("expected Protocol, got {other:?}"),
-        }
-
-        let json = r#"{"kind":"ProtocolSource","params":{"node_id":"p1","channels":2}}"#;
-        let kind: NodeKind =
-            serde_json::from_str(json).expect("旧 ProtocolSource 数据应反序列化成功");
-        match kind {
-            NodeKind::ProtocolSource { port_names, .. } => assert!(port_names.is_none()),
-            other => panic!("expected ProtocolSource, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn text_input_serde_shape() {
-        let json = r#"{"kind":"TextInput","params":{"text":"hi"}}"#;
-        let kind: NodeKind = serde_json::from_str(json).expect("TextInput 应反序列化成功");
-        match kind {
-            NodeKind::TextInput { text } => assert_eq!(text, "hi"),
-            other => panic!("expected TextInput, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn raw_data_handle_prefix() {
-        assert!(is_raw_data_handle("src:tp:rx"));
-        assert!(!is_raw_data_handle("src"));
-        assert!(!is_raw_data_handle("loopbackOut"));
-    }
-
-    #[test]
-    fn protocol_source_predicate() {
-        assert!(is_protocol_source(&NodeKind::ProtocolSource {
-            node_id: "p".into(),
-            channels: 1,
-            port_names: None,
-        }));
-        assert!(!is_protocol_source(&NodeKind::Input));
-        assert!(!is_protocol_source(&NodeKind::Sink));
-    }
-
-    #[test]
-    fn port_domain_import_path_unaffected() {
-        // 端口域仍通过 `kind::PortDomain` 暴露，pub use 路径不破坏
-        let _: PortDomain = PortDomain::F32;
-    }
-}
+#[path = "kind_tests.rs"]
+mod tests;

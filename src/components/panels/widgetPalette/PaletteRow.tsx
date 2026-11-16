@@ -1,10 +1,9 @@
-import { memo, useEffect } from 'react';
+import { memo } from 'react';
 import clsx from 'clsx';
-import { ChevronRight } from 'lucide-react';
 import type { WidgetCategory } from '../../../types';
-import { dockDrag } from '../../../lib/dockDrag';
+import { dockDrag } from '../../../lib/interaction/dockDrag';
 import type { PaletteEntry } from './paletteModel';
-import { HEADER_SIZE, ROW_SIZE } from './paletteModel';
+import { ROW_SIZE } from './paletteModel';
 import { activateOnKeyboard } from '../../../lib/utils/a11y';
 
 /// 各类别的图标底色 (静态类名, 保证 Tailwind 可扫描)
@@ -30,33 +29,15 @@ const tileClass = (cat: WidgetCategory) =>
 interface PaletteRowProps {
   entry: PaletteEntry;
   category: WidgetCategory;
-  /// 分组刚展开 — 播放入场动画 (淡入 + 轻微下滑)
-  entering: boolean;
-  /// 分组折叠中 — 播放退场动画 (淡出 + 轻微左移), 结束后行才从模型剔除
-  exiting: boolean;
   onActivate: (entry: PaletteEntry) => void;
-  /// 入场动画已播放标记 — 虚拟列表滚动会卸载/重挂载行, 标记后重挂载不再重放
-  onEnterPlayed: (key: string) => void;
 }
 
 /// 控件行 — 单行: 分类色图标块 + 名称, 左键拖拽或单击均可添加
 /// 字号取 theme token (--font-size-sm); memo 化后滚动重渲染仅更新可见行
-/// 行高用 px 硬编码并与 paletteModel.ROW_SIZE 严格一致: 根字号为 13px,
-/// rem 类 (h-8/mb-0.5) 的实际像素与虚拟列表的行高估算不符, 会造成跳转落点累积偏差
-export const PaletteRow = memo(function PaletteRow({ entry, category, entering, exiting, onActivate, onEnterPlayed }: PaletteRowProps) {
-  /// 仅挂载时标记一次: 播过入场动画的行, 滚动重挂载后不再重放
-  useEffect(() => {
-    if (entering) onEnterPlayed(entry.key);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+export const PaletteRow = memo(function PaletteRow({ entry, category, onActivate }: PaletteRowProps) {
   return (
     <div
-      className={clsx(
-        'group flex items-center gap-2 px-1.5 rounded-sm cursor-grab select-none transition-colors duration-150 active:cursor-grabbing hover:bg-bg-hover',
-        entering && 'animate-palette-row',
-        exiting && 'animate-palette-row-exit',
-      )}
+      className="group flex items-center gap-2 px-1.5 rounded-sm cursor-grab select-none transition-colors motion-row active:cursor-grabbing hover:bg-bg-hover"
       style={{ height: ROW_SIZE - 2, marginBottom: 2 }}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
@@ -66,8 +47,9 @@ export const PaletteRow = memo(function PaletteRow({ entry, category, entering, 
           widget: {
             kind: entry.kind,
             attribute: entry.attribute,
-            op: entry.op,
-            preset: entry.preset,
+            modelId: entry.modelId,
+            variantId: entry.variantId,
+            documentLabel: entry.documentLabel,
             nodeType: entry.nodeType,
             acquisition: entry.acquisition,
           },
@@ -84,33 +66,12 @@ export const PaletteRow = memo(function PaletteRow({ entry, category, entering, 
       title={entry.title}
     >
       <div className={tileClass(category)}>{entry.icon}</div>
-      <span className="text-[length:var(--font-size-sm)] leading-none truncate text-text-secondary transition-colors group-hover:text-text-primary">
+      {/* 行盒必须容得下中日韩字形的上缘: `truncate` 的 overflow:hidden 以行盒为裁剪线,
+          而多数中文字体的 ascent+descent 超过 1em —— leading-none 会把「右/插/删」这类
+          顶到字身框上缘的字切掉上半 (codeberg #8)。leading-normal(1.5) 留出半行距即可覆盖 */}
+      <span className="text-[length:var(--font-size-sm)] leading-normal truncate text-text-secondary transition-colors group-hover:text-text-primary">
         {entry.label}
       </span>
     </div>
-  );
-});
-
-interface SectionHeaderProps {
-  header: string;
-  collapsed: boolean;
-  onToggle: () => void;
-}
-
-/// 分组头 — 点击折叠/展开, chevron 随状态旋转
-/// 高度同样用 px 硬编码并与 paletteModel.HEADER_SIZE 严格一致 (原因见 PaletteRow)
-export const SectionHeader = memo(function SectionHeader({ header, collapsed, onToggle }: SectionHeaderProps) {
-  return (
-    <button
-      className="flex items-center gap-1 w-full px-1 text-[length:var(--font-size-xs)] font-medium uppercase tracking-wider text-text-disabled hover:text-text-secondary cursor-pointer select-none transition-colors"
-      style={{ height: HEADER_SIZE - 2, marginBottom: 2 }}
-      onClick={onToggle}
-    >
-      <ChevronRight
-        size={12}
-        className={clsx('flex-shrink-0 transition-transform duration-150', !collapsed && 'rotate-90')}
-      />
-      {header}
-    </button>
   );
 });

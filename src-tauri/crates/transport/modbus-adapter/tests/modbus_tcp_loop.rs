@@ -1,22 +1,29 @@
-use acquisition::{
-    AcquisitionRuntime, DriverContext, SourceFactory, SourceRegistry, SubscriptionIntent,
-};
-use data_model::device::{DriverId, DriverPayload, EndpointId, EndpointSpec};
+use acquisition::{AcquisitionRuntime, DriverContext, SourceFactory, SubscriptionIntent};
+use data_model::device::DriverPayload;
+use data_model::device_tree::{DriverId, NodeDecl, NodeId};
+use device_tree::{DeviceTreeAcquisition, DriverRegistry};
 use flow::SourceId;
 use modbus_adapter::{
-    ByteOrder, ModbusArea, ModbusConfig, ModbusDataType, ModbusFactory, ModbusPoint,
-    ReconnectConfig, WordOrder, DRIVER_ID, SCHEMA_VERSION,
+    ByteOrder, DRIVER_ID, ModbusArea, ModbusConfig, ModbusDataType, ModbusFactory, ModbusPoint,
+    ReconnectConfig, SCHEMA_VERSION, WordOrder,
 };
 use points::{
     AcquisitionIntent, AcquisitionMode, DeliveryClass, PointId, PointValue, Priority, ReadRequest,
     WriteItem, WriteRequest,
 };
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
+
+fn runtime_node(id: &str, label: &str, driver: &str, payload: DriverPayload) -> NodeDecl {
+    let mut node =
+        NodeDecl::leaf(id, label, driver, payload.schema_version, payload.payload).unwrap();
+    node.capability_endpoint_id = Some("client".into());
+    node
+}
 
 #[derive(Clone, Debug, PartialEq)]
 struct RequestRecord {
@@ -264,10 +271,12 @@ async fn reads_all_areas_plans_contiguous_registers_and_writes() {
         })
         .await
         .unwrap();
-    assert!(write
-        .items
-        .iter()
-        .all(|item| item.quality.validity == points::Validity::Good));
+    assert!(
+        write
+            .items
+            .iter()
+            .all(|item| item.quality.validity == points::Validity::Good)
+    );
 
     let records = records.lock().await;
     assert!(records.contains(&RequestRecord {
@@ -296,13 +305,15 @@ async fn exception_is_a_bad_sample_with_native_status() {
     let sample = &read.batch.payload.samples[0];
     assert!(sample.value.is_none());
     assert_eq!(sample.quality.validity, points::Validity::Bad);
-    assert!(sample
-        .quality
-        .native
-        .as_ref()
-        .unwrap()
-        .code
-        .starts_with("exception:"));
+    assert!(
+        sample
+            .quality
+            .native
+            .as_ref()
+            .unwrap()
+            .code
+            .starts_with("exception:")
+    );
     session.close().await.unwrap();
 }
 
@@ -342,7 +353,7 @@ async fn polling_subscription_uses_a_bounded_typed_sink() {
 }
 
 #[tokio::test]
-async fn polling_obeys_pause_resume_and_stop_epochs() {
+async fn polling_keeps_running_while_paused_and_stops_on_stop() {
     let (port, _) = spawn_mock().await;
     let factory = ModbusFactory::default();
     let validated = factory.validate(&driver_payload(port)).unwrap();
@@ -382,51 +393,68 @@ async fn polling_obeys_pause_resume_and_stop_epochs() {
         .await
         .unwrap();
 
-    assert!(
-        tokio::time::timeout(Duration::from_millis(40), receiver.recv())
-            .await
-            .is_err()
-    );
+    // 初始暂停: 订阅建立后仍会轮询 (暂停语义 = 只停发送)
+    let batch = tokio::time::timeout(Duration::from_secs(1), receiver.recv())
+        .await
+        .expect("暂停态下 Modbus 轮询必须继续")
+        .unwrap();
+    assert_eq!(batch.payload.samples.len(), 1);
+
     let paused_epoch = execution.epoch();
     execution.set(acquisition::AcquisitionRunState::Running);
     assert!(execution.epoch() > paused_epoch);
+    while receiver.try_recv().is_ok() {}
     let batch = tokio::time::timeout(Duration::from_secs(1), receiver.recv())
         .await
         .unwrap()
         .unwrap();
     assert_eq!(batch.payload.samples.len(), 1);
 
-    execution.set(acquisition::AcquisitionRunState::Paused);
-    while receiver.try_recv().is_ok() {}
-    assert!(
-        tokio::time::timeout(Duration::from_millis(40), receiver.recv())
-            .await
-            .is_err()
-    );
+    // 停止才中止轮询: 逐步排空在途批次 (含阻塞在 sink.send 上的那一批),
+    // 轮询循环随后在状态检查处退出 — 之后再无产出
+    // 停止才中止轮询: 排空在途批次后轮询任务在状态检查处退出 —
+    // 要么超时无产出, 要么通道关闭, 绝不会再收到批次
     execution.set(acquisition::AcquisitionRunState::Stopped);
+    for _ in 0..3 {
+        while receiver.try_recv().is_ok() {}
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    while receiver.try_recv().is_ok() {}
+    match tokio::time::timeout(Duration::from_millis(80), receiver.recv()).await {
+        Err(_) | Ok(None) => {}
+        Ok(Some(batch)) => {
+            panic!("停止后仍产出 {} 个样本", batch.payload.samples.len());
+        }
+    }
     session.close().await.unwrap();
 }
 
 #[tokio::test]
 async fn acquisition_runtime_opens_reads_caches_and_closes_the_adapter() {
     let (port, _) = spawn_mock().await;
-    let registry = Arc::new(SourceRegistry::default());
-    registry.register(Arc::new(ModbusFactory::default()));
-    let runtime = AcquisitionRuntime::new(registry);
-    let endpoint_id = EndpointId("plc-runtime".into());
+    let registry = Arc::new(DriverRegistry::new());
+    let execution = acquisition::ExecutionGate::new(acquisition::AcquisitionRunState::Running);
+    registry
+        .register(Arc::new(modbus_adapter::ModbusTcpDriver::new(
+            execution.clone(),
+        )))
+        .unwrap();
+    let runtime = AcquisitionRuntime::new(Arc::new(DeviceTreeAcquisition::with_execution(
+        registry, execution,
+    )));
+    let endpoint_id = NodeId::new("plc-runtime").unwrap();
     let snapshot = runtime
-        .open_endpoint(EndpointSpec {
-            simulation: None,
-            id: endpoint_id.clone(),
-            label: "PLC runtime".into(),
-            enabled: true,
-            capability_endpoint_id: Some("client".into()),
-            driver: driver_payload(port),
-        })
+        .open_node(runtime_node(
+            "plc-runtime",
+            "PLC runtime",
+            "modbus-tcp",
+            driver_payload(port),
+        ))
         .await
         .unwrap();
-    assert_eq!(snapshot.points.len(), 6);
-    assert!(snapshot.capabilities.unwrap().available.read);
+    let payload = driver_payload(port);
+    assert_eq!(runtime.descriptors(&payload).unwrap().len(), 6);
+    assert!(snapshot.capabilities.read);
 
     let result = runtime
         .read(&endpoint_id, vec![PointId("holding_u16".into())])
@@ -439,24 +467,22 @@ async fn acquisition_runtime_opens_reads_caches_and_closes_the_adapter() {
     assert_eq!(runtime.latest_samples(&endpoint_id).unwrap().len(), 1);
 
     let duplicate = runtime
-        .open_endpoint(EndpointSpec {
-            simulation: None,
-            id: endpoint_id.clone(),
-            label: "duplicate".into(),
-            enabled: true,
-            capability_endpoint_id: Some("client".into()),
-            driver: driver_payload(port),
-        })
+        .open_node(runtime_node(
+            "plc-runtime",
+            "duplicate",
+            "modbus-tcp",
+            driver_payload(port),
+        ))
         .await;
     assert!(matches!(
         duplicate,
         Err(acquisition::AcquisitionError::Busy)
     ));
 
-    runtime.close_endpoint(&endpoint_id).await.unwrap();
+    runtime.close_node(&endpoint_id).await.unwrap();
     assert!(matches!(
         runtime.snapshot(&endpoint_id),
-        Err(acquisition::AcquisitionError::UnknownEndpoint(_))
+        Err(acquisition::AcquisitionError::UnknownNode(_))
     ));
 }
 

@@ -1,8 +1,10 @@
-use data_model::{Result, SlcanConfig};
+use acquisition::ByteMessage;
+use data_model::SlcanConfig;
+use error::Result;
 use error::TransportError;
 use serial::serial::{SerialLifecycle, SerialSettings};
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 
@@ -15,7 +17,7 @@ pub fn spawn(
     config: SlcanConfig,
 ) -> Result<(
     mpsc::Sender<Vec<u8>>,
-    broadcast::Sender<Vec<u8>>,
+    broadcast::Sender<ByteMessage>,
     Arc<AtomicBool>,
 )> {
     let settings = SerialSettings {
@@ -40,7 +42,7 @@ struct SlcanLifecycle {
 }
 
 impl SerialLifecycle for SlcanLifecycle {
-    fn on_open(&self, port: &mut dyn serial::serialport::SerialPort) -> Result<()> {
+    fn on_open(&self, port: &mut dyn serialport::SerialPort) -> Result<()> {
         let bitrate = format!("{}\r", self.bitrate_command);
         port.write_all(bitrate.as_bytes())
             .map_err(TransportError::SlcanBitrate)?;
@@ -51,7 +53,7 @@ impl SerialLifecycle for SlcanLifecycle {
         Ok(())
     }
 
-    fn on_close(&self, port: &mut dyn serial::serialport::SerialPort) {
+    fn on_close(&self, port: &mut dyn serialport::SerialPort) {
         let _ = port.write_all(b"C\r");
     }
 }

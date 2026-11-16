@@ -12,7 +12,6 @@ import { nanoid } from 'nanoid';
 import { api } from '../../lib/tauri/tauri';
 import { setInputValue as apiSetInputValue, submitCustomOutput as apiSubmitCustomOutput } from '../../lib/buffers/graphSubscription';
 import {
-  createProtocolNode,
   isStructuralNode,
   syncTabGraphToBackend,
   removeTabGraphFromBackend,
@@ -21,13 +20,17 @@ import {
 } from '../appStoreHelpers';
 import { loadAdapterCapabilities } from '../../lib/acquisition/capabilityCatalog';
 import { buildDeviceCards } from '../../lib/acquisition/deviceCardModel';
-import { createAcquisitionNode } from '../../lib/acquisition/acquisitionNodes';
-import { defaultSimulation } from '../../lib/acquisition/simulation';
+import { prepareAcquisitionNode, type AcquisitionNodeData } from '../../lib/acquisition/acquisitionNodes';
+import { prepareProtocolDocument } from '../../lib/models/createFromCatalog';
+import { deviceTreeCanvasNodes, walkDeviceTree } from '../../lib/acquisition/deviceTreeModel';
+import { createProtocolEngineNode } from '../../lib/acquisition/deviceTree';
+import { useDockStore } from '../dockStore';
+import { NODE_PROPERTIES_TAB_ID } from '../../types';
 import { rawDataPortId } from '../../lib/utils/nodeDef';
 import { withHistoryOp } from '../historyStore';
 import type { HistoryTarget, NodeOpRef } from '../historyStore';
 import { nodeLabelOf, nodeRefOf } from '../../lib/utils/nodeKindVisuals';
-import type { ProtocolConfig, WidgetConfig } from '../../types';
+import type { DeviceTreeNodeDecl, WidgetConfig } from '../../types';
 import type { AppSlice } from './types';
 
 export interface GraphSlice {
@@ -52,12 +55,11 @@ export interface GraphSlice {
   removeTabGraph: (tabId: string) => void;
   setInputValue: (widgetId: string, value: number) => void;
   submitCustomOutput: (widgetId: string, outputs: Record<string, number>) => void;
-  addProtocolNode: (config?: ProtocolConfig, position?: { x: number; y: number }, tabId?: string) => void;
   removeNode: (nodeId: string) => void;
   /// 设置节点显式尺寸 (属性面板数字输入; undefined = 恢复内容自适应)
   setNodeSize: (nodeId: string, size: { width?: number; height?: number }) => void;
-  /// 初始图种子: 串口设备+测试属性 → JustFloat → RawData
-  seedInitialGraph: (rawDataWidgetId: string) => void;
+  /// 初始图种子: Serial → JustFloat → RawData，选中 Serial 并打开数据/属性窗口
+  seedInitialGraph: (rawDataWidgetId: string, source?: 'startup' | 'user') => Promise<void>;
 }
 
 export const createGraphSlice: AppSlice<GraphSlice> = (set, get) => {
@@ -70,9 +72,10 @@ export const createGraphSlice: AppSlice<GraphSlice> = (set, get) => {
   const affectedTabsOf = (nodeIds: (string | null | undefined)[]): string[] => {
     const state = get();
     const tabs = new Set<string>();
+    const allNodes = [...state.rfNodes, ...deviceTreeCanvasNodes(state.rfNodes)];
     for (const id of nodeIds) {
       if (!id) continue;
-      const node = state.rfNodes.find((n: Node) => n.id === id);
+      const node = allNodes.find((n: Node) => n.id === id);
       if (!node) continue;
       if (node.data?.tabId) tabs.add(node.data.tabId as string);
     }
@@ -104,10 +107,10 @@ export const createGraphSlice: AppSlice<GraphSlice> = (set, get) => {
         set((s) => ({ rfNodes: s.rfNodes.map((node) => {
           if (node.id !== nodeId) return node;
           const widget = node.data.widget as WidgetConfig | undefined;
-          const spec = node.data.spec as import('../../types').EndpointSpec | undefined;
+          const device = node.data.node as DeviceTreeNodeDecl | undefined;
           return { ...node, data: { ...node.data, label: label.trim(),
             ...(widget ? { widget: { ...widget, params: { ...widget.params, label: label.trim() } } } : {}),
-            ...(spec ? { spec: { ...spec, label: label.trim() } } : {}),
+            ...(device ? { node: { ...device, name: label.trim() } } : {}),
           } };
         }) }));
         get().syncAllTabGraphs();
@@ -139,19 +142,6 @@ export const createGraphSlice: AppSlice<GraphSlice> = (set, get) => {
       void apiSubmitCustomOutput(widgetId, outputs);
     },
 
-    addProtocolNode: (config, position, tabId) =>
-      withHistoryOp(
-        {
-          opKey: 'opAddProtocolNode',
-          detailText: config?.kind ?? undefined,
-          target: { kind: 'node', node: { kind: 'protocol' } },
-        },
-        () => {
-        const node = createProtocolNode(config, position, tabId);
-        set((s) => ({ rfNodes: [...s.rfNodes, node] }));
-        get().syncAllTabGraphs();
-      }),
-
     removeNode: (nodeId) => {
       const victim = get().rfNodes.find((n: Node) => n.id === nodeId);
       if (victim?.type === 'widget') {
@@ -170,13 +160,15 @@ export const createGraphSlice: AppSlice<GraphSlice> = (set, get) => {
           if (!node || !isStructuralNode(node)) return;
           // 关闭仍打开的连接 (尽力而为)
           if (node.type === 'acquisition') void api.closeTransport(nodeId).catch(() => { return undefined; });
+          const removedIds = new Set(node.type === 'acquisition'
+            ? walkDeviceTree((node.data as AcquisitionNodeData).node).map(child => child.id) : [nodeId]);
           set((s) => ({
             rfNodes: s.rfNodes.filter((n: Node) => n.id !== nodeId),
-            rfEdges: s.rfEdges.filter((e: Edge) => e.source !== nodeId && e.target !== nodeId),
+            rfEdges: s.rfEdges.filter((e: Edge) => !removedIds.has(e.source) && !removedIds.has(e.target)),
           }));
           // 同步清理派生端口表 (后端 remove_tab_graph 也会发新的 GraphDerived,
           // 但单节点删除不会触发 remove_tab_graph, 需前端本地清理)
-          get().removeDerived([nodeId]);
+          get().removeDerived([...removedIds]);
           get().syncAllTabGraphs();
         }
       );
@@ -205,21 +197,42 @@ export const createGraphSlice: AppSlice<GraphSlice> = (set, get) => {
         { coalesceKey: `node.size.${nodeId}` }
       ),
 
-    seedInitialGraph: (rawDataWidgetId) => {
-      const tabId = get().rfNodes.find(n => n.id === rawDataWidgetId)?.data.tabId as string;
-      void loadAdapterCapabilities().then(adapters => {
-        if (!get().rfNodes.some(n => n.id === rawDataWidgetId)) return;
+    seedInitialGraph: async (rawDataWidgetId, source = 'startup') => {
+      try {
+        const adapters = await loadAdapterCapabilities();
+        const state = get();
+        const rawNode = state.rfNodes.find(n => n.id === rawDataWidgetId);
+        if (!rawNode || (source === 'startup' && state.workspaceRestored)) return;
+        const tabId = rawNode.data.tabId as string;
+        // Async catalog loading must not duplicate nodes or overwrite work started meanwhile.
+        if (state.rfNodes.some(n => n.data.tabId === tabId && n.id !== rawDataWidgetId)) return;
         const card = buildDeviceCards(adapters).find(c => c.adapter.adapterId === 'serial');
         if (!card) return;
-        const device = createAcquisitionNode(card, { x: 60, y: 100 });
-        device.data.tabId = tabId;
-        device.data.spec.simulation = defaultSimulation();
-        const protocol = createProtocolNode(DEFAULT_PROTOCOL_CONFIG, { x: 320, y: 100 });
-        protocol.data.tabId = tabId;
-        set(s => ({ rfNodes: [...s.rfNodes, device, protocol] }));
-        get().onConnect({ source: device.id, sourceHandle: 'rx', target: protocol.id, targetHandle: 'in' });
-        get().onConnect({ source: protocol.id, sourceHandle: 'out', target: rawDataWidgetId, targetHandle: 'data' });
-      }).catch(error => console.warn('[workspace] initial device catalog unavailable', error));
+        // 设备根节点 (目录 driver 默认配置) + 协议引擎子节点
+        // (schema 单一来源 = 目录 prepare)
+        const device = await prepareAcquisitionNode(card, { x: 60, y: 100 }, tabId);
+        const { protocol, schema } = await prepareProtocolDocument(DEFAULT_PROTOCOL_CONFIG, tabId);
+        const protocolChild = createProtocolEngineNode(device.data.node as DeviceTreeNodeDecl, { protocol, convertTo: null, schema });
+        (device.data.node as DeviceTreeNodeDecl).children.push(protocolChild);
+        device.selected = true;
+        set(s => ({
+          rfNodes: [...s.rfNodes.map(n => ({ ...n, selected: false })), device],
+          activeControlTabId: tabId,
+        }));
+        get().onConnect({ source: protocolChild.id, sourceHandle: 'out', target: rawDataWidgetId, targetHandle: 'data' });
+        get().addNodePropertiesTab();
+        get().setActiveDataTab(rawDataWidgetId);
+        const dock = useDockStore.getState();
+        dock.reconcile('control', get().controlTabs.map(tab => tab.id));
+        dock.reconcile('data', get().dataTabs.map(tab => tab.id));
+        dock.dockPropertiesTab(NODE_PROPERTIES_TAB_ID);
+        const controlCard = Object.values(useDockStore.getState().cards).find(c => c.kind === 'control' && c.tabIds.includes(tabId));
+        if (controlCard) dock.setActiveTab(controlCard.id, tabId);
+        const dataCard = Object.values(useDockStore.getState().cards).find(c => c.tabIds.includes(rawDataWidgetId));
+        if (dataCard) dock.setActiveTab(dataCard.id, rawDataWidgetId);
+      } catch (error) {
+        console.warn('[workspace] initial device catalog unavailable', error);
+      }
     },
 
     onNodesChange: (changes) => {
@@ -242,7 +255,8 @@ export const createGraphSlice: AppSlice<GraphSlice> = (set, get) => {
           if (ch.type === 'remove') {
             const node = get().rfNodes.find((n: Node) => n.id === ch.id);
             if (node && isStructuralNode(node)) {
-              removedStructuralIds.push(ch.id);
+              removedStructuralIds.push(...(node.type === 'acquisition'
+                ? walkDeviceTree((node.data as AcquisitionNodeData).node).map(child => child.id) : [ch.id]));
               if (node.type === 'acquisition') removedTransportIds.push(ch.id);
             } else if (node?.data?.tabId) {
               removedWidgetTabIds.add(node.data.tabId as string);
@@ -363,9 +377,10 @@ export const createGraphSlice: AppSlice<GraphSlice> = (set, get) => {
     },
 
     onConnect: (connection) => {
-      const source = nodeById(connection.source);
+      const graphNodes = [...get().rfNodes, ...deviceTreeCanvasNodes(get().rfNodes)];
+      const source = graphNodes.find(node => node.id === connection.source);
       const target = nodeById(connection.target);
-      if (!source || !target || source.data.tabId !== target.data.tabId) return;
+      if (!source || !target || target.data.treeRootId || source.data.tabId !== target.data.tabId) return;
       const fromRef = refOf(connection.source);
       const toRef = refOf(connection.target);
       const fromLabel = nodeLabelOf(get().rfNodes.find((n: Node) => n.id === connection.source));
@@ -385,7 +400,7 @@ export const createGraphSlice: AppSlice<GraphSlice> = (set, get) => {
             ...connection,
             id: nanoid(8),
           };
-          const sourceNode = get().rfNodes.find((n: Node) => n.id === connection.source);
+          const sourceNode = [...get().rfNodes, ...deviceTreeCanvasNodes(get().rfNodes)].find((n: Node) => n.id === connection.source);
           const targetNode = get().rfNodes.find((n: Node) => n.id === connection.target);
           const tabId = sourceNode?.data.tabId as string;
           // RawData 输入端口是动态派生的 (`src:<source>:<handle>`), 连接时它显示的回退端口 'data'
@@ -411,7 +426,8 @@ export const createGraphSlice: AppSlice<GraphSlice> = (set, get) => {
     },
 
     getTabEdges: (tabId) => {
-      const tabNodeIds = new Set(get().getTabNodes(tabId).map((n: Node) => n.id));
+      const tabNodes = get().getTabNodes(tabId);
+      const tabNodeIds = new Set([...tabNodes, ...deviceTreeCanvasNodes(tabNodes)].map((n: Node) => n.id));
       return get().rfEdges.filter((e: Edge) => tabNodeIds.has(e.source) && tabNodeIds.has(e.target));
     },
   };

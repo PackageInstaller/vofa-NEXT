@@ -98,8 +98,6 @@ export interface FFTConfig {
 export interface SpectrumConfig {
   id: string;
   label: string;
-  /// 数据源 FFT widget id (null = 未选择, 显示等待提示)
-  sourceId: string | null;
 }
 
 /// 逆 FFT 求解配置 (频域→时域: 输入频域 spectrum, 输出时域 out0)
@@ -150,8 +148,7 @@ export interface MathConfig {
 /// 单目运算集合 — 这些 op 只使用第一个输入
 ///
 /// 内部派生 (Math NodeDef `input_count` 在 widgetToNodeKind 中按 `isUnary` 强制 1);
-/// 此前以 `UNARY_MATH_OPS` 公开重导出被 NodeEditor / WidgetPalette / MathWidget 共用,
-/// 现在以 `isUnaryMathOp` 函数 + `lib/utils/nodeDef.ts` 内部使用替代,
+/// 以 `isUnaryMathOp` 函数 + `lib/utils/nodeDef.ts` 内部使用,
 /// 上层应改读 `widget.params.inputCount` (用户配置 → 后端 input_count 直接透传)。
 const _UNARY_MATH_OPS: readonly MathOp[] = ['abs', 'neg', 'square', 'sqrt', 'sin', 'cos', 'tan', 'log'];
 
@@ -161,28 +158,6 @@ export function isUnaryMathOp(op: MathOp): boolean {
 }
 
 /// 计算数学运算结果 (输入为 number[], 输出为单 number)
-export function computeMathResult(op: MathOp, inputs: number[]): number {
-  const vals = inputs.filter((v) => typeof v === 'number' && !Number.isNaN(v));
-  if (vals.length === 0) return 0;
-  switch (op) {
-    case 'add': return vals.reduce((a, b) => a + b, 0);
-    case 'sub': return vals.reduce((a, b) => a - b, 0);
-    case 'mul': return vals.reduce((a, b) => a * b, 1);
-    case 'div': return vals.reduce((a, b) => (b === 0 ? 0 : a / b), vals[0] ?? 0);
-    case 'avg': return vals.reduce((a, b) => a + b, 0) / vals.length;
-    case 'min': return Math.min(...vals);
-    case 'max': return Math.max(...vals);
-    case 'abs': return Math.abs(vals[0]);
-    case 'neg': return -vals[0];
-    case 'square': return vals[0] * vals[0];
-    case 'sqrt': return vals[0] < 0 ? 0 : Math.sqrt(vals[0]);
-    case 'sin': return Math.sin(vals[0]);
-    case 'cos': return Math.cos(vals[0]);
-    case 'tan': return Math.tan(vals[0]);
-    case 'log': return vals[0] <= 0 ? 0 : Math.log(vals[0]);
-    default: return 0;
-  }
-}
 
 // ============ 字符串操作控件 ============
 //
@@ -313,7 +288,7 @@ export type Model3DMode = 'trajectory' | 'attitude' | 'trajectory-attitude';
 
 /// 姿态输入格式
 /// - degrees:    roll / pitch / yaw，单位为度
-/// - radians:    roll / pitch / yaw，单位为弧度（旧配置兼容默认值）
+/// - radians:    roll / pitch / yaw，单位为弧度（默认值）
 /// - quaternion: q0 / q1 / q2 / q3，其中 q0 = w
 export type Model3DAttitudeInputMode = 'degrees' | 'radians' | 'quaternion';
 
@@ -365,7 +340,7 @@ export interface ControlTab {
 
 // ============ 数据显示区 Tab ============
 
-export type DataTabType = 'waveform' | 'raw' | 'pie' | 'image' | 'waveform-extra' | 'model3d' | 'spectrum' | 'command' | 'can' | 'logic' | 'frame-decoder' | 'table-view' | 'trigger' | 'compile-errors' | 'compile-results' | 'operation-history' | 'node-properties';
+export type DataTabType = 'waveform' | 'raw' | 'pie' | 'image' | 'waveform-extra' | 'model3d' | 'spectrum' | 'command' | 'can' | 'logic' | 'frame-decoder' | 'table-view' | 'trigger' | 'compile-errors' | 'compile-results' | 'operation-history' | 'node-properties' | 'recording-database' | 'performance-monitor';
 
 /// 节点属性面板 tab 的稳定 id — 默认布局专属卡 (properties-main) 与
 /// addNodePropertiesTab 重建路径共用, 关闭再开仍落回同一张卡

@@ -6,8 +6,8 @@ use std::collections::HashMap;
 
 use app::AppState;
 use buffer_graph::Edge;
-use kind::document::{NodeAttributes, NodeBusiness, NodeDocument, NodeLayout};
-use pipeline::{NodeDef, NodeKind};
+use kind::document::{NodeBusiness, NodeDocument, NodeLayout};
+use kind::{NodeDef, NodeKind};
 use serde_json::json;
 
 use crate::{
@@ -16,11 +16,7 @@ use crate::{
 };
 
 fn input_node(id: &str, tab_id: &str) -> NodeDef {
-    NodeDef {
-        id: id.into(),
-        tab_id: tab_id.into(),
-        kind: NodeKind::Input,
-    }
+    NodeDef::new(id.into(), tab_id.into(), NodeKind::Input)
 }
 
 /// update_tab_graph 提交后必须立即快照评估: 无 transport 数据流时,
@@ -106,26 +102,28 @@ async fn remove_tab_graph_refreshes_snapshot() {
 // ---- 源图存储 / 版本冲突 / 拓扑 op ----
 
 fn protocol_node(id: &str, tab_id: &str) -> NodeDef {
-    NodeDef {
-        id: id.into(),
-        tab_id: tab_id.into(),
-        kind: NodeKind::Protocol {
+    NodeDef::new(
+        id.into(),
+        tab_id.into(),
+        NodeKind::Protocol {
+            schema: schema_types::schema_from_protocol_config(
+                &schema_types::ProtocolConfig::JustFloat { channels: None },
+            ),
             config: schema_types::ProtocolConfig::JustFloat { channels: None },
             convert_to: None,
-            schema: None,
         },
-    }
+    )
 }
 
 fn math_node(id: &str, tab_id: &str) -> NodeDef {
-    NodeDef {
-        id: id.into(),
-        tab_id: tab_id.into(),
-        kind: NodeKind::Math {
-            op: pipeline::MathOp::Add,
+    NodeDef::new(
+        id.into(),
+        tab_id.into(),
+        NodeKind::Math {
+            op: kind::MathOp::Add,
             input_count: 1,
         },
-    }
+    )
 }
 
 fn edge(id: &str, source: &str, sh: &str, target: &str, th: &str) -> Edge {
@@ -159,7 +157,6 @@ fn widget_document(
             params,
             custom_ports: None,
         },
-        attributes: NodeAttributes::default(),
     }
 }
 
@@ -180,12 +177,11 @@ fn protocol_document(id: &str, tab_id: &str) -> NodeDocument {
             convert_to: None,
             schema: schema_types::ProtocolSchema {
                 preset: schema_types::SchemaPreset::JustFloat,
-                legacy_config: Some(protocol),
+                preset_config: Some(protocol),
                 decode: Vec::new(),
                 encode: None,
             },
         },
-        attributes: NodeAttributes::default(),
     }
 }
 

@@ -3,13 +3,13 @@
 
 use async_trait::async_trait;
 use can::{CanDirection, CanFrame};
-use data_model::{Error, Result};
-use error::TransportError;
+
+use error::{AppError as Error, Result, TransportError};
 use parking_lot::Mutex;
 use protocol::ProtocolEngine;
 use protocol_can_bridge::{CandleEngine, SlcanEngine};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{broadcast, mpsc};
 use transport::CanBackend;
 

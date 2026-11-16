@@ -1,30 +1,32 @@
 import { useAppStore } from '../../../store/appStore';
 import { canFrameBuffer } from '../../../lib/buffers/canBuffer';
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { t } from '../../../i18n';
+import { translate } from '../../../i18n';
 import { CanFrameList } from './CanFrameList';
 import { CanSender } from './CanSender';
 import { CanLoadView } from './CanLoadView';
 import { PanelTabs } from '../../ui/PanelTabs';
 import { ContextualHint } from '../../onboarding/ContextualHint';
 import { usePrimaryProtocolConfig } from '../../../lib/hooks/usePrimaryNodes';
-import { List, Send, BarChart3, Gauge } from 'lucide-react';
+import { List, Send, BarChart3, Gauge, TableProperties } from 'lucide-react';
+import { CanIdLatestView } from './CanIdLatestView';
 import type { CanFrame } from '../../../types';
 
-type ViewMode = 'list' | 'send' | 'chart' | 'load';
+type ViewMode = 'list' | 'latest' | 'send' | 'chart' | 'load';
 
 /// CAN 综合视图 — 帧列表 / 发送器 / 总线活动 / 负载分析 四种视图模式切换
 export function CanView() {
   const lang = useAppStore((s) => s.lang);
   const protocolConfig = usePrimaryProtocolConfig();
-  const setSidebarView = useAppStore((s) => s.setSidebarView);
+  const openCategory = useAppStore((s) => s.openCategory);
   const [mode, setMode] = useState<ViewMode>('list');
 
   const tabs = [
-    { value: 'list' as const, label: t(lang, 'frameList'), icon: <List /> },
-    { value: 'send' as const, label: t(lang, 'canSender'), icon: <Send /> },
-    { value: 'chart' as const, label: t(lang, 'busActivity'), icon: <BarChart3 /> },
-    { value: 'load' as const, label: t(lang, 'canLoadAnalysis'), icon: <Gauge /> },
+    { value: 'list' as const, label: translate('frameList', lang), icon: <List /> },
+    { value: 'latest' as const, label: translate('canLatestById', lang), icon: <TableProperties /> },
+    { value: 'send' as const, label: translate('canSender', lang), icon: <Send /> },
+    { value: 'chart' as const, label: translate('busActivity', lang), icon: <BarChart3 /> },
+    { value: 'load' as const, label: translate('canLoadAnalysis', lang), icon: <Gauge /> },
   ];
 
   const isCanProtocol = protocolConfig?.kind === 'Slcan' || protocolConfig?.kind === 'CandleLight';
@@ -34,10 +36,10 @@ export function CanView() {
       {!isCanProtocol && (
         <ContextualHint
           id="can-protocol-mismatch"
-          message={t(lang, 'canHintMessage')}
+          message={translate('canHintMessage', lang)}
           action={{
-            label: t(lang, 'canHintAction'),
-            onClick: () => setSidebarView('widgets'),
+            label: translate('canHintAction', lang),
+            onClick: () => openCategory('protocol'),
           }}
         />
       )}
@@ -47,6 +49,7 @@ export function CanView() {
       </div>
       <div className="flex-1 overflow-hidden min-h-0">
         {mode === 'list' && <CanFrameList />}
+        {mode === 'latest' && <CanIdLatestView />}
         {mode === 'send' && <CanSender />}
         {mode === 'chart' && <CanBusChart />}
         {mode === 'load' && <CanLoadView />}
@@ -97,12 +100,12 @@ function CanBusChart() {
   return (
     <div className="h-full overflow-y-auto p-4">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-text-primary">{t(lang, 'idDistribution')}</h3>
+        <h3 className="text-sm font-semibold text-text-primary">{translate('idDistribution', lang)}</h3>
         <span className="text-xs text-text-secondary font-mono">{canFrameBuffer.length} frames</span>
       </div>
       {idStats.length === 0 ? (
         <div className="flex items-center justify-center h-48 text-text-secondary text-xs rounded border border-dashed border-border bg-bg-panel-header/50">
-          {t(lang, 'noCanFrames')}
+          {translate('noCanFrames', lang)}
         </div>
       ) : (
         <div className="space-y-1.5">

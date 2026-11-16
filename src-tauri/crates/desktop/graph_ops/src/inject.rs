@@ -9,7 +9,7 @@
 //! 推导 (后端单一权威)。
 
 use buffer_graph::Edge;
-use pipeline::{protocol_source_port_names, NodeDef, NodeKind};
+use kind::{NodeDef, NodeKind, protocol_source_port_names};
 use schema_types::ProtocolConfig;
 use std::collections::HashSet;
 
@@ -38,15 +38,18 @@ pub fn inject_protocol_sources(nodes: &[NodeDef], edges: &[Edge]) -> Vec<NodeDef
             continue;
         }
         let (channels, port_names) = protocol_output_spec(proto, edges);
-        sources.push(NodeDef {
-            id: proto.id.clone(),
-            tab_id: proto.tab_id.clone(),
-            kind: NodeKind::ProtocolSource {
+        // 双角色说明: 同一 id 的 Protocol 定义携带设备树来源 (byte_def 侧),
+        // 这里注入的 ProtocolSource 只是它在数值平面的派生视图, 故标记 Derived。
+        sources.push(NodeDef::derived(
+            proto.id.clone(),
+            proto.id.clone(),
+            proto.tab_id.clone(),
+            NodeKind::ProtocolSource {
                 node_id: proto.id.clone(),
                 channels,
-                port_names: Some(port_names),
+                port_names,
             },
-        });
+        ));
     }
     sources
 }
@@ -61,12 +64,12 @@ fn protocol_output_spec(node: &NodeDef, edges: &[Edge]) -> (usize, Vec<String>) 
         return (0, Vec::new());
     };
     match schema {
-        Some(s) if s.preset == schema_types::SchemaPreset::Custom => {
+        s if s.preset == schema_types::SchemaPreset::Custom => {
             let names = s.port_names();
             (names.len(), names)
         }
-        Some(_) | None => {
-            // preset (有 schema 但非 Custom) 或 无 schema (前端已省略) — 均走 preset 路径
+        _ => {
+            // preset (非 Custom) — 走 preset 路径
             if matches!(config, ProtocolConfig::RawData) {
                 return (1, vec!["str".to_string()]);
             }
@@ -82,7 +85,7 @@ fn protocol_output_spec(node: &NodeDef, edges: &[Edge]) -> (usize, Vec<String>) 
                 .max()
                 .map_or(0, |index| index.saturating_add(1));
             let n = configured.max(referenced);
-            let names = protocol_source_port_names(None, n);
+            let names = protocol_source_port_names(&[], n);
             (n, names)
         }
     }
@@ -98,232 +101,5 @@ fn channels_from_config(config: &ProtocolConfig) -> usize {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use buffer_graph::Edge;
-    use graph_testkit::make_device_in;
-    use pipeline::NodeKind;
-    use schema_types::{DecoderBlockDef, FieldType, SchemaPreset};
-
-    fn protocol_node(
-        id: &str,
-        config: ProtocolConfig,
-        schema: Option<schema_types::ProtocolSchema>,
-    ) -> NodeDef {
-        NodeDef {
-            id: id.into(),
-            tab_id: "tab1".into(),
-            kind: NodeKind::Protocol {
-                config,
-                convert_to: None,
-                schema,
-            },
-        }
-    }
-
-    fn edge(source: &str, source_handle: &str, target: &str, target_handle: &str) -> Edge {
-        Edge {
-            id: format!("e-{source}-{target}"),
-            source: source.into(),
-            source_handle: source_handle.into(),
-            target: target.into(),
-            target_handle: target_handle.into(),
-        }
-    }
-
-    #[test]
-    fn empty_edges_yields_no_injection() {
-        let n = protocol_node("p1", ProtocolConfig::JustFloat { channels: Some(4) }, None);
-        assert!(inject_protocol_sources(&[n], &[]).is_empty());
-    }
-
-    #[test]
-    fn edge_from_protocol_emits_single_protocol_source() {
-        let proto = protocol_node("p1", ProtocolConfig::JustFloat { channels: Some(4) }, None);
-        let widget = NodeDef {
-            id: "w1".into(),
-            tab_id: "tab1".into(),
-            kind: NodeKind::Sink,
-        };
-        let edges = vec![edge("p1", "ch0", "w1", "in0")];
-        let sources = inject_protocol_sources(&[proto, widget], &edges);
-        assert_eq!(sources.len(), 1);
-        assert_eq!(sources[0].id, "p1");
-        let NodeKind::ProtocolSource {
-            node_id,
-            channels,
-            port_names,
-        } = &sources[0].kind
-        else {
-            panic!("expected ProtocolSource");
-        };
-        assert_eq!(node_id, "p1");
-        assert_eq!(*channels, 4);
-        assert_eq!(
-            port_names.as_ref().unwrap().as_slice(),
-            &[
-                "ch0".to_string(),
-                "ch1".to_string(),
-                "ch2".to_string(),
-                "ch3".to_string()
-            ]
-        );
-    }
-
-    #[test]
-    fn multiple_edges_to_same_protocol_emit_once() {
-        let proto = protocol_node("p1", ProtocolConfig::JustFloat { channels: Some(2) }, None);
-        let widget_a = NodeDef {
-            id: "wa".into(),
-            tab_id: "tab1".into(),
-            kind: NodeKind::Sink,
-        };
-        let widget_b = NodeDef {
-            id: "wb".into(),
-            tab_id: "tab1".into(),
-            kind: NodeKind::Sink,
-        };
-        let edges = vec![
-            edge("p1", "ch0", "wa", "in0"),
-            edge("p1", "ch1", "wb", "in0"),
-        ];
-        let sources = inject_protocol_sources(&[proto, widget_a, widget_b], &edges);
-        assert_eq!(sources.len(), 1);
-    }
-
-    #[test]
-    fn edge_from_device_does_not_emit_protocol_source() {
-        let device = make_device_in("t1", "tab1");
-        let widget = NodeDef {
-            id: "w1".into(),
-            tab_id: "tab1".into(),
-            kind: NodeKind::Sink,
-        };
-        let edges = vec![edge("t1", "rx", "w1", "data")];
-        let sources = inject_protocol_sources(&[device, widget], &edges);
-        assert!(sources.is_empty());
-    }
-
-    #[test]
-    fn custom_schema_emits_named_ports() {
-        let schema = schema_types::ProtocolSchema {
-            preset: SchemaPreset::Custom,
-            legacy_config: None,
-            decode: vec![DecoderBlockDef::Field {
-                id: "f1".into(),
-                port_name: "rpm".into(),
-                field_type: FieldType::Float32LE,
-                length_ref: None,
-                match_id: None,
-            }],
-            encode: None,
-        };
-        let proto = protocol_node(
-            "p1",
-            ProtocolConfig::JustFloat { channels: None },
-            Some(schema),
-        );
-        let widget = NodeDef {
-            id: "w1".into(),
-            tab_id: "tab1".into(),
-            kind: NodeKind::Sink,
-        };
-        let edges = vec![edge("p1", "rpm", "w1", "in0")];
-        let sources = inject_protocol_sources(&[proto, widget], &edges);
-        assert_eq!(sources.len(), 1);
-        let NodeKind::ProtocolSource {
-            channels,
-            port_names,
-            ..
-        } = &sources[0].kind
-        else {
-            panic!();
-        };
-        assert_eq!(*channels, 1);
-        assert_eq!(
-            port_names.as_ref().unwrap().as_slice(),
-            &["rpm".to_string()]
-        );
-    }
-
-    #[test]
-    fn rawdata_protocol_emits_str_only() {
-        let proto = protocol_node("p1", ProtocolConfig::RawData, None);
-        let widget = NodeDef {
-            id: "w1".into(),
-            tab_id: "tab1".into(),
-            kind: NodeKind::Sink,
-        };
-        let edges = vec![edge("p1", "str", "w1", "in0")];
-        let sources = inject_protocol_sources(&[proto, widget], &edges);
-        assert_eq!(sources.len(), 1);
-        let NodeKind::ProtocolSource {
-            channels,
-            port_names,
-            ..
-        } = &sources[0].kind
-        else {
-            panic!();
-        };
-        assert_eq!(*channels, 1);
-        assert_eq!(
-            port_names.as_ref().unwrap().as_slice(),
-            &["str".to_string()]
-        );
-    }
-
-    /// 与 derived 端 `preset_justfloat_auto_falls_back_to_default` 对齐:
-    /// `channels: None` 时 inject 也回退到默认 4 端口, 避免两侧派生不一致
-    #[test]
-    fn preset_justfloat_auto_channels_uses_default_four() {
-        let proto = protocol_node("p1", ProtocolConfig::JustFloat { channels: None }, None);
-        let widget = NodeDef {
-            id: "w1".into(),
-            tab_id: "tab1".into(),
-            kind: NodeKind::Sink,
-        };
-        let edges = vec![edge("p1", "ch0", "w1", "in0")];
-        let sources = inject_protocol_sources(&[proto, widget], &edges);
-        assert_eq!(sources.len(), 1);
-        let NodeKind::ProtocolSource {
-            channels,
-            port_names,
-            ..
-        } = &sources[0].kind
-        else {
-            panic!("expected ProtocolSource");
-        };
-        assert_eq!(*channels, 4);
-        assert_eq!(
-            port_names.as_ref().unwrap().as_slice(),
-            &[
-                "ch0".to_string(),
-                "ch1".to_string(),
-                "ch2".to_string(),
-                "ch3".to_string()
-            ]
-        );
-    }
-
-    #[test]
-    fn preset_auto_channels_expand_to_highest_referenced_handle() {
-        let proto = protocol_node("p1", ProtocolConfig::JustFloat { channels: None }, None);
-        let widget = NodeDef {
-            id: "w1".into(),
-            tab_id: "tab1".into(),
-            kind: NodeKind::Sink,
-        };
-        let edges = vec![edge("p1", "ch7", "w1", "value")];
-        let sources = inject_protocol_sources(&[proto, widget], &edges);
-        let NodeKind::ProtocolSource {
-            channels,
-            port_names,
-            ..
-        } = &sources[0].kind
-        else {
-            panic!("expected ProtocolSource");
-        };
-        assert_eq!(*channels, 8);
-        assert_eq!(port_names.as_ref().unwrap().last().unwrap(), "ch7");
-    }
-}
+#[path = "inject_tests.rs"]
+mod tests;

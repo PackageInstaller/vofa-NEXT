@@ -17,39 +17,82 @@
 use serde::{Deserialize, Serialize};
 
 /// CAN wire bitrate shared by transport configuration and CAN adapters.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+///
+/// Serde 契约名见 [`Self::NAMES`], 与前端 `CanBitrate` 联合类型逐字一致;
+/// 配置 schema 的候选列表一律由 [`Self::ALL`] 生成, 禁止手写字面量。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
 pub enum CanBitrate {
+    Bps10k,
+    Bps20k,
+    Bps50k,
     Bps100k,
     Bps125k,
     Bps250k,
     Bps500k,
+    Bps800k,
     Bps1m,
 }
 
 impl CanBitrate {
+    /// 全部变体, 按速率升序 — 配置 schema 枚举的唯一事实来源。
+    pub const ALL: [Self; 9] = [
+        Self::Bps10k,
+        Self::Bps20k,
+        Self::Bps50k,
+        Self::Bps100k,
+        Self::Bps125k,
+        Self::Bps250k,
+        Self::Bps500k,
+        Self::Bps800k,
+        Self::Bps1m,
+    ];
+
+    /// serde 契约名, 顺序对应 [`Self::ALL`] — 前端联合类型的镜像, 勿改动大小写。
+    pub const NAMES: &[&str] = &[
+        "Bps10k", "Bps20k", "Bps50k", "Bps100k", "Bps125k", "Bps250k", "Bps500k", "Bps800k",
+        "Bps1m",
+    ];
+
     pub const fn bps(&self) -> u32 {
         match self {
+            Self::Bps10k => 10_000,
+            Self::Bps20k => 20_000,
+            Self::Bps50k => 50_000,
             Self::Bps100k => 100_000,
             Self::Bps125k => 125_000,
             Self::Bps250k => 250_000,
             Self::Bps500k => 500_000,
+            Self::Bps800k => 800_000,
             Self::Bps1m => 1_000_000,
         }
     }
 
+    /// Lawicel slcan 速率命令 (S0..S8)。
     pub const fn slcan_cmd(&self) -> &'static str {
         match self {
+            Self::Bps10k => "S0",
+            Self::Bps20k => "S1",
+            Self::Bps50k => "S2",
             Self::Bps100k => "S3",
             Self::Bps125k => "S4",
             Self::Bps250k => "S5",
             Self::Bps500k => "S6",
+            Self::Bps800k => "S7",
             Self::Bps1m => "S8",
         }
+    }
+
+    /// 解析契约名 — 精确匹配。
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::NAMES
+            .iter()
+            .position(|candidate| *candidate == name)
+            .map(|index| Self::ALL[index])
     }
 }
 
 /// 解析后的数据帧 — 协议引擎输出的标准格式
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 pub struct DataFrame {
     /// 时间戳 (微秒, monotonic)
     pub timestamp: u64,
@@ -93,7 +136,7 @@ impl DataFrame {
 }
 
 /// 原始数据块 — 未经协议解析的字节流
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 pub struct RawData {
     pub timestamp: u64,
     pub data: Vec<u8>,
@@ -107,7 +150,7 @@ impl RawData {
 }
 
 /// 连接状态
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
 pub enum ConnectionState {
     Disconnected,
     Connecting,
@@ -116,7 +159,7 @@ pub enum ConnectionState {
 }
 
 /// 串口端口信息 (跨平台)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 pub struct PortInfo {
     pub name: String,
     pub port_type: String,
@@ -129,7 +172,7 @@ pub struct PortInfo {
 }
 
 /// 传输统计
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
 pub struct TransportStats {
     pub rx_bytes: u64,
     pub tx_bytes: u64,
@@ -148,5 +191,22 @@ pub fn now_us() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_micros() as u64)
+        .map_or(0, |d| u64::try_from(d.as_micros()).unwrap_or(u64::MAX))
+}
+
+/// Unix epoch 毫秒 — 全工作区唯一实现 (时间源不可用时回退 0)
+pub fn now_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+}
+
+/// Unix epoch 纳秒 — 饱和到 `i64::MAX`, 供采集质量时间戳使用
+pub fn now_ns() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    i64::try_from(nanos).unwrap_or(i64::MAX)
 }

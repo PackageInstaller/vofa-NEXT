@@ -1,20 +1,21 @@
 //! 设备节点读任务 — 每个已连接字节设备节点一个
 //!
-//! 循环: subscribe 收字节 → 合批 (try_recv 排空, 上限取配置快照) → raw 收集 → raw 收集 →
-//! 沿全局 BytePlan 路由 (协议解析/帧解码喂入/回注发送) → 统计节流 emit。
+//! 循环: subscribe 收字节 → 合批 (try_recv 排空, 上限取配置快照, 不跨方向) →
+//! raw 收集 (方向取信封: 设备接收 Rx / 发送回环 Tx) → 沿全局 BytePlan 路由
+//! (协议解析/帧解码喂入/回注发送) → 统计节流 emit (rx 统计仅记接收)。
 //! 广播通道关闭 (连接断开) 时退出并 emit Disconnected。
 
 use bus::{AdaptiveController, RuntimeLimits};
 use data_model::{ConnectionState, TransportStats};
-use flow::{Boundary, Framing};
+use events::{EventSinkHandle, emit_transport_rx, emit_transport_state};
+use flow::{Boundary, Direction, Framing};
 use kind::NodeKind;
 use raw_data::RawDataDirection;
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::Ordering;
 use std::time::Instant;
-use tauri::AppHandle;
 
-use super::{byte_router, frame_dispatch, DataPlaneState, STATS_THROTTLE_MS};
+use super::{DataPlaneState, STATS_THROTTLE_MS, byte_router, frame_dispatch};
 use crate::feed_parallel::FEED_PARALLEL_UNIT;
 
 pub(super) fn mark_downstream_disconnected(plane: &DataPlaneState, transport_id: &str) {
@@ -38,6 +39,41 @@ pub(super) fn mark_downstream_disconnected(plane: &DataPlaneState, transport_id:
             }
             pending.push_back(route.target.clone());
         }
+    }
+}
+
+/// 读任务生命周期卫兵 — `detach` 使用 abort，普通函数尾部日志不会执行；
+/// Drop 保证正常退出与主动中止都能留下任务级计数，供泄漏调查关联。
+struct ReadTaskGuard {
+    node_id: String,
+    started: Instant,
+    messages: u64,
+    bytes: u64,
+    frames: u64,
+}
+
+impl ReadTaskGuard {
+    fn new(node_id: String) -> Self {
+        Self {
+            node_id,
+            started: Instant::now(),
+            messages: 0,
+            bytes: 0,
+            frames: 0,
+        }
+    }
+}
+
+impl Drop for ReadTaskGuard {
+    fn drop(&mut self) {
+        log::info!(
+            "数据读任务退出: node={}, elapsed_ms={}, messages={}, bytes={}, frames={}",
+            self.node_id,
+            self.started.elapsed().as_millis(),
+            self.messages,
+            self.bytes,
+            self.frames
+        );
     }
 }
 
@@ -74,7 +110,7 @@ fn reset_downstream_parsers(plane: &DataPlaneState, transport_id: &str) {
                 let state = plane.protocol_states.lock().get(&target).cloned();
                 if let Some(state) = state {
                     *state.lock() =
-                        super::ProtocolNodeState::new(config, convert_to.as_ref(), schema.as_ref());
+                        super::ProtocolNodeState::new(config, convert_to.as_ref(), schema);
                 }
             }
             Some(NodeKind::FrameDecoder { .. }) => {
@@ -143,12 +179,13 @@ fn note_test_data_gap(
 
 /// 设备节点读任务
 pub(super) async fn read_task(
-    app: AppHandle,
+    sink: EventSinkHandle,
     plane: DataPlaneState,
     node_id: String,
-    mut rx: acquisition::LegacyFlowReceiver,
+    mut rx: acquisition::FlowReceiver,
 ) {
     log::debug!("数据读任务已启动: {node_id}");
+    let mut guard = ReadTaskGuard::new(node_id.clone());
     let mut dec_cache = crate::decoder_feed::DecoderFeedCache::new();
     let mut last_stats = Instant::now();
     let mut acc_bytes: u64 = 0;
@@ -159,8 +196,12 @@ pub(super) async fn read_task(
     let mut avg_bytes_per_frame = 16.0_f64;
     // 启动时取一次轻量句柄: 每批的运行态配置 (采样时钟) / rx 统计上报
     // 都免 manager 全局锁 (逐批锁会与 open/close/其他传输串行化)
-    let live = plane.transport.live_handle(&node_id);
+    let live = data_model::device_tree::NodeId::new(&node_id)
+        .ok()
+        .and_then(|node_id| plane.transport.live_handle(&node_id));
     let mut pending = None;
+    let mut last_connection_epoch = None;
+    let mut last_diag = Instant::now();
 
     loop {
         let first = if let Some(envelope) = pending.take() {
@@ -171,6 +212,22 @@ pub(super) async fn read_task(
                 Err(acquisition::FlowRecvError::Closed) => break,
             }
         };
+
+        // 源端为字节标记到达时刻; 停止后重新启动时, 早于本次启动的旧字节在
+        // 这里丢弃 (从暂停恢复不推进恢复点 — 暂停期字节本就连续入缓存)。
+        // 不以消费时刻判断，否则恢复瞬间尚未排空的旧字节会被当成新帧。
+        if first.observed_time_unix_ns != 0
+            && first.observed_time_unix_ns < plane.eval.execution.resumed_at_unix_ns()
+        {
+            continue;
+        }
+
+        if last_connection_epoch
+            .replace(first.connection_epoch)
+            .is_some_and(|epoch| epoch != first.connection_epoch)
+        {
+            reset_downstream_parsers(&plane, &node_id);
+        }
 
         if let Some(gap) = &first.gap_before {
             record_lagged(&plane, &node_id, live.as_ref(), gap.missing_sequences());
@@ -197,12 +254,19 @@ pub(super) async fn read_task(
                 first.payload.boundary,
                 Boundary::Complete | Boundary::Continue | Boundary::End
             );
+        // 回环发送与设备接收方向不同, 合并成一批会丢失方向语义 (raw 收集/统计
+        // 按批方向归属), 因此合批只在同方向消息间进行
+        let batch_direction = first.direction;
+        let batch_epoch = first.connection_epoch;
+        let is_receive = batch_direction == Direction::Receive;
         let mut data = first.payload.bytes.to_vec();
         let mut coalesced = 1usize;
         while can_coalesce && coalesced < 1024 && data.len() < coalesce_cap {
             match rx.try_recv() {
                 Ok(next)
                     if next.gap_before.is_none()
+                        && next.connection_epoch == batch_epoch
+                        && next.direction == batch_direction
                         && next.payload.framing == Framing::Stream
                         && matches!(
                             next.payload.boundary,
@@ -221,6 +285,38 @@ pub(super) async fn read_task(
                 ) => break,
             }
         }
+        guard.messages = guard.messages.saturating_add(coalesced as u64);
+        guard.bytes = guard.bytes.saturating_add(data.len() as u64);
+        // 沿全局 BytePlan 路由 (深度提示取广播积压, 供并行解析判定)
+        let t_feed = Instant::now();
+        if last_diag.elapsed() >= std::time::Duration::from_secs(1) {
+            log::info!(
+                "数据读任务路由开始: node={node_id}, rx_queue={}, batch_bytes={}, messages={}",
+                rx.len(),
+                data.len(),
+                guard.messages
+            );
+            last_diag = Instant::now();
+        }
+        let depth_hint = rx.len().max(
+            controller
+                .workers()
+                .saturating_sub(1)
+                .saturating_mul(FEED_PARALLEL_UNIT),
+        );
+        // 数据链门控: 运行与暂停都放行 — 暂停期间字节继续解析并进入波形/原始
+        // 数据/CAN/逻辑缓存与录制; 只有停止是硬门控, 字节直接丢弃 (广播通道容量
+        // 有界, 积压自然转化为 Lagged 计数)。read_task 保持存活排空通道,
+        // 设备连接不受影响。快速路径先行免锁; 路由持 boundary 读锁并在锁内
+        // 复查票据 — 与运行状态切换 (写锁) 互斥: 切换不可能打断在途路由,
+        // 旧 epoch 的解析结果不会在切换后继续入队。
+        if plane.eval.execution.ingest_ticket().is_none() {
+            continue;
+        }
+        let boundary = plane.eval.execution.boundary.read().await;
+        if plane.eval.execution.ingest_ticket().is_none() {
+            continue;
+        }
         plane.metrics.rx_msgs.fetch_add(
             u64::try_from(coalesced).unwrap_or(u64::MAX),
             Ordering::Relaxed,
@@ -229,50 +325,49 @@ pub(super) async fn read_task(
             .metrics
             .rx_bytes
             .fetch_add(data.len() as u64, Ordering::Relaxed);
-
-        // 按源原始字节收集 (不随解析积压丢失 — 收集在路由之前完成)
+        // 原始数据、统计和协议帧共用数据链边界；暂停继续采集, 停止才丢弃。
         plane.raw_collector_for(&node_id).lock().push_chunk(
             data_model::now_us(),
-            RawDataDirection::Rx,
+            if is_receive {
+                RawDataDirection::Rx
+            } else {
+                RawDataDirection::Tx
+            },
             &data,
         );
-
-        // 沿全局 BytePlan 路由 (深度提示取广播积压, 供并行解析判定)
-        let t_feed = Instant::now();
-        let depth_hint = rx.len().max(
-            controller
-                .workers()
-                .saturating_sub(1)
-                .saturating_mul(FEED_PARALLEL_UNIT),
-        );
-        // 运行门控: 暂停/停止时丢弃字节 (广播通道容量有界, 积压自然转化为
-        // Lagged 计数) — 不积压暂停期间的数据; read_task 保持存活排空通道,
-        // 设备连接不受影响。快速路径先行免锁; 路由持 boundary 读锁并在锁内
-        // 复查票据 — 与运行状态切换 (写锁) 互斥: 切换不可能打断在途路由,
-        // 旧 epoch 的解析结果不会在切换后继续入队。
-        if plane.eval.execution.ticket().is_none() {
-            continue;
-        }
-        let summary = {
-            let _boundary = plane.eval.execution.boundary.read().await;
-            if plane.eval.execution.ticket().is_none() {
-                continue;
-            }
-            byte_router::route_bytes(
-                &plane,
-                Some(&app),
-                &node_id,
-                &data,
-                depth_hint,
-                &mut dec_cache,
-                live.as_ref(),
-            )
-            .await
-        };
-        if plane.stop_for_recording_fault().await {
+        let summary = byte_router::route_bytes_with_direction(
+            &plane,
+            Some(sink.as_ref()),
+            &node_id,
+            &data,
+            depth_hint,
+            &mut dec_cache,
+            live.as_ref(),
+            if is_receive {
+                can::CanDirection::Rx
+            } else {
+                can::CanDirection::Tx
+            },
+        )
+        .await;
+        // 录制失败 (已受理的绑定批次写不下去) 停止采集 — 录制契约优先于预览。
+        // 录制"不可用"(数据库打不开) 不在此列: 那时没有 writer 也就没有契约,
+        // 采集必须继续 (否则每次启动都会被立刻停回停止态)。
+        if plane.eval.recording.fault().is_some() {
+            drop(boundary);
+            plane.stop_for_recording_fault().await;
             continue;
         }
         let service_time = t_feed.elapsed();
+        if service_time >= std::time::Duration::from_millis(100) {
+            log::warn!(
+                "字节路由慢: node={node_id}, elapsed_ms={}, batch_bytes={}, messages={}, frames={}",
+                service_time.as_millis(),
+                data.len(),
+                guard.messages,
+                summary.frames
+            );
+        }
         let cfg = *plane.pipeline_config.read();
         let queued = rx.len();
         // queue_fill 用广播通道真实容量 (通道均以 INGEST_CHANNEL_CAPACITY 创建),
@@ -286,12 +381,7 @@ pub(super) async fn read_task(
             queue_age,
             service_time,
             data.len(),
-            RuntimeLimits {
-                max_workers: cfg.max_workers,
-                memory_budget_mb: cfg.memory_budget_mb,
-                preview_fps_limit: cfg.preview_fps_limit,
-                preview_bandwidth_mb_per_sec: cfg.preview_bandwidth_mb_per_sec,
-            },
+            RuntimeLimits::from(&cfg),
         );
         plane.metrics.feed_ns.fetch_add(
             u64::try_from(t_feed.elapsed().as_nanos()).unwrap_or(u64::MAX),
@@ -305,26 +395,30 @@ pub(super) async fn read_task(
             frame_dispatch::refresh_snapshot(&plane);
         }
 
-        // 统计 (record_rx 由消费侧上报, 经轻量句柄免全局锁)
-        if let Some(live) = &live {
-            live.record_rx(data.len(), summary.frames);
-        }
+        // 统计 (record_rx 由消费侧上报, 经轻量句柄免全局锁;
+        // 发送回环不算接收, 避免 rx 统计被自己的发送虚增)
         if summary.frames > 0 {
             #[allow(clippy::cast_precision_loss)] // EMA 统计近似, 精度损失无影响
             let batch_avg = data.len() as f64 / summary.frames as f64;
             avg_bytes_per_frame = avg_bytes_per_frame.mul_add(0.9, batch_avg * 0.1);
         }
-        acc_bytes += data.len() as u64;
-        acc_frames += summary.frames;
+        if is_receive {
+            if let Some(live) = &live {
+                live.record_rx(data.len(), summary.frames);
+            }
+            acc_bytes += data.len() as u64;
+            acc_frames += summary.frames;
+        }
         plane
             .metrics
             .frames_ingested
             .fetch_add(summary.frames, Ordering::Relaxed);
+        guard.frames = guard.frames.saturating_add(summary.frames);
 
         // 统计节流 emit (100ms 窗口)
         if last_stats.elapsed().as_millis() >= STATS_THROTTLE_MS {
-            events::emit_transport_rx(
-                &app,
+            emit_transport_rx(
+                sink.as_ref(),
                 &node_id,
                 TransportStats {
                     rx_bytes: acc_bytes,
@@ -345,9 +439,9 @@ pub(super) async fn read_task(
             plane.metrics.report();
             last_report = Instant::now();
         }
+        drop(boundary);
     }
 
     mark_downstream_disconnected(&plane, &node_id);
-    events::emit_transport_state(&app, &node_id, ConnectionState::Disconnected);
-    log::debug!("数据读任务已退出: {node_id}");
+    emit_transport_state(sink.as_ref(), &node_id, ConnectionState::Disconnected);
 }

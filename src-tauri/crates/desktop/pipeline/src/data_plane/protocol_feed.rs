@@ -1,12 +1,13 @@
 //! Protocol 节点喂入 — 解析 → 采样时钟定案 → 旁路缓冲 → convert 链下推
 
 use std::sync::Arc;
+use std::time::Instant;
 
-use schema_types::{ProtocolConfig, SchemaPreset};
-use tauri::AppHandle;
+use events::{BackendEventSink, NotifyLevel};
+use schema_types::SchemaPreset;
 
-use super::byte_router::{route_inner, RouteSummary};
 use super::DataPlaneState;
+use super::byte_router::{RouteSummary, route_inner};
 use crate::decoder_feed::DecoderFeedCache;
 use crate::feed_parallel::workers_needed;
 
@@ -28,7 +29,7 @@ fn channels_detection_change(last_pushed: Option<usize>, current: Option<usize>)
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn feed_protocol(
     plane: &DataPlaneState,
-    app: Option<&AppHandle>,
+    sink: Option<&dyn BackendEventSink>,
     source_id: &str,
     proto_id: &str,
     members: &[String],
@@ -38,9 +39,13 @@ pub(super) async fn feed_protocol(
     summary: &mut RouteSummary,
     depth: usize,
     live: Option<&acquisition::LiveNodeHandle>,
+    can_direction: can::CanDirection,
 ) {
     let Some(st) = plane.protocol_states.lock().get(proto_id).cloned() else {
-        log::debug!("协议节点无运行时状态, 跳过喂入: {proto_id}");
+        plane.warn_feed_gap_once(
+            proto_id,
+            &format!("协议节点无运行时状态, 喂入被跳过 (图未同步或节点未编译): {proto_id}"),
+        );
         return;
     };
     let (engine, parallel) = {
@@ -58,6 +63,7 @@ pub(super) async fn feed_protocol(
     };
 
     let mut detection = None;
+    let parse_started = Instant::now();
     let mut out = if can_parallel {
         // 首次进入并行: 接续主引擎内部缓冲里的半个帧 (false→true 转换沿)
         let enter_parallel = {
@@ -94,12 +100,25 @@ pub(super) async fn feed_protocol(
         }
     };
 
+    let parse_elapsed = parse_started.elapsed();
+    if parse_elapsed >= std::time::Duration::from_millis(100) {
+        log::warn!(
+            "协议解析慢: proto={proto_id}, source={source_id}, elapsed_ms={}, bytes={}, parallel={can_parallel}, workers={workers}",
+            parse_elapsed.as_millis(),
+            data.len()
+        );
+    }
+
     // 已连接 Transport 的运行时配置是采样时钟权威；图配置可能正处于防抖同步
     // 或编译错误状态。TestData 使用明确采样率；串口按波特率、字符格式和本批
     // 实际字节/帧数估算线速。网络等无时钟信息的来源仍保留到达时间语义。
     // 读任务热路径经轻量句柄免全局锁; 命令注入路径 (loopback/mcp) 无句柄, 回退全局锁
     let live_transport_config = live.map_or_else(
-        || plane.transport.config(source_id),
+        || {
+            data_model::device_tree::NodeId::new(source_id)
+                .ok()
+                .and_then(|node_id| plane.transport.config(&node_id))
+        },
         |handle| handle.config_of(source_id),
     );
     let clock_config = live_transport_config;
@@ -169,17 +188,20 @@ pub(super) async fn feed_protocol(
         drop(s);
         (notify_once, push)
     };
-    if let (Some(app), Some(n)) = (app, notify_once) {
-        events::notify::channels_detected(app, n);
+    if let (Some(sink), Some(n)) = (sink, notify_once) {
+        sink.notify(NotifyLevel::Info, &format!("检测到 {n} 个通道"));
     }
     if let Some(n) = push {
-        if let Some(app) = app {
-            events::emit_protocol_channels_detected(app, proto_id, n);
+        if let Some(sink) = sink {
+            events::emit_protocol_channels_detected(sink, proto_id, n);
         }
         plane.buffer_for(proto_id).lock().set_channels(n);
     }
 
     // CAN 帧旁路 (slcan/candleLight) — 全局缓冲 + 负载统计 (仅 Rx 计入)
+    for frame in &mut out.can_frames {
+        frame.direction = can_direction;
+    }
     if !out.can_frames.is_empty() {
         let mut buf = plane.can_buffer.lock();
         let mut stats = plane.can_load_stats.lock();
@@ -205,16 +227,13 @@ pub(super) async fn feed_protocol(
     }
 
     // RawData 判定 + convert 引擎 (一次锁取齐)
-    // 有效预设判定: 有 schema 时按 preset (用户编辑块后 preset=Custom, 走 SchemaEngine 产帧,
-    // 不再做文本缓存/原文透传); 无 schema (旧前端) 回退按 config.kind
+    // 预设判定按 schema.preset (用户编辑块后 preset=Custom, 走 SchemaEngine 产帧,
+    // 不再做文本缓存/原文透传)
     let (convert_engine, is_raw_data) = {
         let s = st.lock();
         (
             s.convert_engine.clone(),
-            s.schema.as_ref().map_or_else(
-                || matches!(s.config, ProtocolConfig::RawData),
-                |schema| schema.preset == SchemaPreset::RawData,
-            ),
+            s.schema.preset == SchemaPreset::RawData,
         )
     };
 
@@ -254,7 +273,7 @@ pub(super) async fn feed_protocol(
     if !converted.is_empty() {
         Box::pin(route_inner(
             plane,
-            app,
+            sink,
             proto_id,
             &converted,
             0,
@@ -262,6 +281,7 @@ pub(super) async fn feed_protocol(
             summary,
             depth + 1,
             live,
+            can_direction,
         ))
         .await;
     } else if is_raw_data && !data.is_empty() {
@@ -270,7 +290,7 @@ pub(super) async fn feed_protocol(
         // 避免设置 convert_to 后原文被静默丢弃
         Box::pin(route_inner(
             plane,
-            app,
+            sink,
             proto_id,
             data,
             0,
@@ -278,6 +298,7 @@ pub(super) async fn feed_protocol(
             summary,
             depth + 1,
             live,
+            can_direction,
         ))
         .await;
     }

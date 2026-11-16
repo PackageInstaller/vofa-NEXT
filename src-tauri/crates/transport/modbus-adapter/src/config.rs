@@ -22,11 +22,7 @@ impl ModbusArea {
     }
 
     pub const fn max_read_quantity(self) -> u16 {
-        if self.is_bits() {
-            2_000
-        } else {
-            125
-        }
+        if self.is_bits() { 2_000 } else { 125 }
     }
 }
 
@@ -106,36 +102,7 @@ impl ModbusPoint {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReconnectConfig {
-    #[serde(default = "default_reconnect_attempts")]
-    pub max_attempts: u32,
-    #[serde(default = "default_reconnect_delay_ms")]
-    pub initial_delay_ms: u64,
-    #[serde(default = "default_reconnect_max_delay_ms")]
-    pub max_delay_ms: u64,
-}
-
-const fn default_reconnect_attempts() -> u32 {
-    3
-}
-const fn default_reconnect_delay_ms() -> u64 {
-    100
-}
-const fn default_reconnect_max_delay_ms() -> u64 {
-    2_000
-}
-
-impl Default for ReconnectConfig {
-    fn default() -> Self {
-        Self {
-            max_attempts: default_reconnect_attempts(),
-            initial_delay_ms: default_reconnect_delay_ms(),
-            max_delay_ms: default_reconnect_max_delay_ms(),
-        }
-    }
-}
+pub use acquisition::config::ReconnectConfig;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -255,12 +222,7 @@ impl ModbusRtuConfig {
 }
 
 fn validate_reconnect(reconnect: &ReconnectConfig) -> Result<(), PlanError> {
-    if reconnect.initial_delay_ms > reconnect.max_delay_ms {
-        return Err(PlanError::InvalidConfig(
-            "initial reconnect delay exceeds maximum".into(),
-        ));
-    }
-    Ok(())
+    reconnect.validate().map_err(PlanError::InvalidConfig)
 }
 
 fn validate_points(points: &[ModbusPoint]) -> Result<(), PlanError> {

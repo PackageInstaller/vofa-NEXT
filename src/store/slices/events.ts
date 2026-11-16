@@ -1,11 +1,9 @@
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { RunState } from '../../types';
+import { transport } from '../../lib/rpc';
 import {
   subscribeSpectrum,
   subscribeStringOutputs,
 } from '../../lib/buffers/graphSubscription';
-import { canFrameBuffer } from '../../lib/buffers/canBuffer';
-import { subscribeCanFrames } from '../../lib/buffers/canSubscription';
 import { logicSampleBuffer, decodedEventBuffer } from '../../lib/buffers/logicBuffer';
 import { subscribeLogicSamples, subscribeDecodedEvents } from '../../lib/buffers/logicSubscription';
 import {
@@ -22,14 +20,19 @@ import type {
 } from '../../lib/tauri/tauri';
 import { EMPTY_NODE_STATS } from './connection';
 import type { AppSlice } from './types';
+import { translate } from '../../i18n';
+import {
+  notify,
+  formatError,
+  type NotificationAction,
+} from '../../lib/tauri/notifications';
 import type { GraphStateSlice } from './graphState';
 import type { GraphDerivedPayload } from './derived';
 import type { GraphCompileEvent } from './compileStatus';
 
-let unlistenFns: UnlistenFn[] = [];
+let unlistenFns: (() => void)[] = [];
 let textOutputSub: { cancel: () => void } | null = null;
 let spectrumSub: { cancel: () => void } | null = null;
-let canFramesSub: { cancel: () => void } | null = null;
 let logicSamplesSub: { cancel: () => void } | null = null;
 let decodedEventsSub: { cancel: () => void } | null = null;
 let storeUnsub: (() => void) | null = null;
@@ -64,7 +67,7 @@ function makeRafCoalescer<T>(apply: (value: T) => void): RafCoalescer<T> {
   };
 }
 
-/// protocol:channels-detected payload 兼容解析 — 契约为 { node_id, channels };
+/// protocol:channels-detected payload 解析 — 契约为 { node_id, channels };
 /// 后端由 feed_protocol 在检测值变化时 (None→Some(n) 或 Some(a)→Some(b)) 主动推送
 function parseChannelsDetectedEvent(
   payload: unknown
@@ -153,15 +156,13 @@ export const createEventSlice: AppSlice<EventSlice> = (set, get) => {
       unlistenFns.forEach((fn) => fn());
       unlistenFns = [];
 
-      const unlistenState = await listen<TransportStateEvent>('transport:state', (event) => {
-        const { node_id, state } = event.payload;
+      const unlistenState = await transport.listen<TransportStateEvent>('transport:state', ({ node_id, state }) => {
         set((s) => ({
           connectionStates: { ...s.connectionStates, [node_id]: state },
         }));
       });
 
-      const unlistenStats = await listen<TransportRxEvent>('transport:rx', (event) => {
-        const { node_id, stats } = event.payload;
+      const unlistenStats = await transport.listen<TransportRxEvent>('transport:rx', ({ node_id, stats }) => {
         set((s) => {
           const prev = s.nodeStats[node_id] ?? EMPTY_NODE_STATS;
           return {
@@ -180,8 +181,8 @@ export const createEventSlice: AppSlice<EventSlice> = (set, get) => {
         });
       });
 
-      const unlistenChannels = await listen<unknown>('protocol:channels-detected', (event) => {
-        const parsed = parseChannelsDetectedEvent(event.payload);
+      const unlistenChannels = await transport.listen<unknown>('protocol:channels-detected', (payload) => {
+        const parsed = parseChannelsDetectedEvent(payload);
         if (!parsed) return;
         const { nodeId, channels } = parsed;
         // 写 detectedChannels (后端单一权威; UI 派生端口表 / 通道数随之刷新)
@@ -211,16 +212,16 @@ export const createEventSlice: AppSlice<EventSlice> = (set, get) => {
       // graph:derived — 后端 update_tab_graph / remove_tab_graph 提交后 emit;
       // 写 derivedPorts (端口表渲染单一权威); 与 update_tab_graph 响应合并写入,
       // 后到的事件作为权威覆盖前者 (后端保证唯一来源, 重复仅幂等刷新)。
-      const unlistenDerived = await listen<unknown>('graph:derived', (event) => {
-        const parsed = parseGraphDerivedEvent(event.payload);
+      const unlistenDerived = await transport.listen<unknown>('graph:derived', (payload) => {
+        const parsed = parseGraphDerivedEvent(payload);
         if (!parsed) return;
         get().setDerived(parsed.nodes);
       });
 
       // graph:compile — 后端 cmd_graph 编译队列状态广播;
       // 写 compileStatus 切片 (状态栏 / tab 角标 / 画布错误高亮的单一权威)。
-      const unlistenCompile = await listen<unknown>('graph:compile', (event) => {
-        const parsed = parseGraphCompileEvent(event.payload);
+      const unlistenCompile = await transport.listen<unknown>('graph:compile', (payload) => {
+        const parsed = parseGraphCompileEvent(payload);
         if (!parsed) return;
         get().setCompileEvent(parsed);
         // refetch HIR (供 compile-results Tab 渲染);
@@ -232,8 +233,8 @@ export const createEventSlice: AppSlice<EventSlice> = (set, get) => {
 
       // graph:source — 后端权威源图回推 (拓扑 op / MCP / 其他写入方提交成功后);
       // 画布按此收敛边与缺失节点。提交在途时暂缓 (在途提交的响应/冲突路径已覆盖)
-      const unlistenSource = await listen<unknown>('graph:source', (event) => {
-        const parsed = parseGraphSourceEvent(event.payload);
+      const unlistenSource = await transport.listen<unknown>('graph:source', (payload) => {
+        const parsed = parseGraphSourceEvent(payload);
         if (!parsed) return;
         if (isSyncInFlight(parsed.tab_id)) return;
         adoptSourceGraph(parsed);
@@ -241,8 +242,8 @@ export const createEventSlice: AppSlice<EventSlice> = (set, get) => {
 
       // workspace:run — 工作区运行状态广播 (启动/暂停/停止, state + epoch);
       // 切片内的动作调用以命令返回值为准, 此处只做幂等刷新 (含 AI/MCP 写入方)
-      const unlistenRun = await listen<{ state: RunState }>('workspace:run', (event) => {
-        set({ runState: event.payload.state });
+      const unlistenRun = await transport.listen<{ state: RunState }>('workspace:run', ({ state }) => {
+        set({ runState: state });
       });
 
       unlistenFns = [
@@ -270,11 +271,6 @@ export const createEventSlice: AppSlice<EventSlice> = (set, get) => {
       if (spectrumSub) spectrumSub.cancel();
       spectrumSub = subscribeSpectrum((batch) => {
         spectrumCoalescer.push(batch.spectra);
-      });
-
-      if (canFramesSub) canFramesSub.cancel();
-      canFramesSub = subscribeCanFrames((batch) => {
-        canFrameBuffer.push(batch.frames);
       });
 
       if (logicSamplesSub) logicSamplesSub.cancel();
@@ -326,7 +322,48 @@ export const createEventSlice: AppSlice<EventSlice> = (set, get) => {
         get().controlTabs.forEach((tab) => { void get().syncTabGraph(tab.id); });
       }
 
+      // Web 出口断线重连: 断线期间的后端事件已经丢失, 图与运行态只能重新拉取对账。
+      // 显示订阅由 transport 自行重订 (服务端订阅表随连接关闭注销), 这里不重复处理。
+      // 桌面出口不提供该回调 — 无重连语义, 连接即进程内 IPC。
+      const removeReconnect = transport.onReconnect?.(() => {
+        void hydrateWorkspaceFromBackend().catch(() => undefined);
+        void get().hydrateRunState();
+        get().controlTabs.forEach((tab) => { void get().syncTabGraph(tab.id); });
+      });
+
+      // 服务端通知帧 → 应用内提示。导出类通知带下载链接: 浏览器无法直接落盘,
+      // 由 transport 带鉴权取回字节流再触发保存 (令牌不进 URL)。
+      const removeServerNotify = transport.onServerNotify?.((notification) => {
+        const downloadUrl = notification.url;
+        const lang = useAppStore.getState().lang;
+        const actions: NotificationAction[] = downloadUrl
+          ? [
+              {
+                label: translate('download', lang),
+                run: () => {
+                  void transport
+                    .downloadFile?.(downloadUrl, 'export.csv')
+                    .catch((error: unknown) => {
+                      notify.error(translate('downloadFailed', lang), formatError(error), {
+                        source: 'download',
+                      });
+                    });
+                },
+              },
+            ]
+          : [];
+        const options = { source: 'server', actions };
+        const title = translate('serverNotify', lang);
+        if (notification.level === 'error') {
+          notify.error(title, notification.message, options);
+        } else {
+          notify.info(title, notification.message, options);
+        }
+      });
+
       return () => {
+        removeReconnect?.();
+        removeServerNotify?.();
         unlistenFns.forEach((fn) => fn());
         unlistenFns = [];
         spectrumCoalescer.cancel();
@@ -346,10 +383,6 @@ export const createEventSlice: AppSlice<EventSlice> = (set, get) => {
         if (spectrumSub) {
           spectrumSub.cancel();
           spectrumSub = null;
-        }
-        if (canFramesSub) {
-          canFramesSub.cancel();
-          canFramesSub = null;
         }
         if (logicSamplesSub) {
           logicSamplesSub.cancel();

@@ -21,7 +21,7 @@ use waveform::DataBuffer;
 
 use super::DataPlaneState;
 use crate::eval_state::GraphEvalState;
-use crate::graph_eval::{evaluate_snapshot_now, process_source_batch, EvalBreakdown};
+use crate::graph_eval::{EvalBreakdown, evaluate_snapshot_now, process_source_batch};
 
 /// 评估分派选项 — [`PipelineConfig`] 的热路径投影 (每批读取一次)
 #[derive(Debug, Clone, Copy)]
@@ -132,10 +132,10 @@ pub fn eval_frames(
     u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
-/// 兼容入口 — 记录 + 求值一次完成 (测试 / 同步 flush 路径; 运行时两平面分离)
+/// 记录 + 求值一次完成 (测试 / 同步 flush 路径; 运行时两平面分离)。
 ///
 /// 返回数值平面耗时 ns (push_frame + 图评估 + 派生 + 频谱, 观测用)。
-pub fn on_frames(plane: &DataPlaneState, source_id: &str, frames: &[DataFrame]) -> u64 {
+pub fn record_and_eval(plane: &DataPlaneState, source_id: &str, frames: &[DataFrame]) -> u64 {
     record_frames(plane, source_id, frames);
     let buffer = plane.buffer_for(source_id);
     let options = EvalOptions::from_config(&plane.pipeline_config.read());
@@ -182,9 +182,7 @@ pub(crate) fn publish_protocol_samples(
         .get(source_id)
         .and_then(|node| match &node.kind {
             NodeKind::PointSelector { points } => Some(points.clone()),
-            NodeKind::Protocol { schema, .. } => schema
-                .as_ref()
-                .map(schema_types::ProtocolSchema::port_names),
+            NodeKind::Protocol { schema, .. } => Some(schema.port_names()),
             _ => None,
         })
         .unwrap_or_default();
@@ -231,15 +229,15 @@ pub(crate) fn publish_protocol_samples(
                     values.push(f64::from(*value));
                 }
             }
-            if !values.is_empty() {
-                if let Err(error) = eval.recording.record_next(
+            if !values.is_empty()
+                && let Err(error) = eval.recording.record_next(
                     &recording_port,
                     eval.execution.snapshot().epoch,
                     timestamps,
                     recording::BatchPayload::Float { values },
-                ) {
-                    log::error!("protocol sample recording stopped accepting data: {error}");
-                }
+                )
+            {
+                log::error!("protocol sample recording stopped accepting data: {error}");
             }
         }
         if !bus.is_active(&key) {
@@ -284,17 +282,17 @@ pub fn cache_source_text(plane: &DataPlaneState, source_id: &str, data: &[u8]) {
     let text = String::from_utf8_lossy(data).into_owned();
     let timestamp = data_model::now_us();
     let port = recording::PortIdentity::new(source_id, "str");
-    if plane.eval.recording.is_bound(&port) {
-        if let Err(error) = plane.eval.recording.record_next(
+    if plane.eval.recording.is_bound(&port)
+        && let Err(error) = plane.eval.recording.record_next(
             &port,
             plane.eval.execution.snapshot().epoch,
             vec![timestamp],
             recording::BatchPayload::String {
                 values: vec![text.clone()],
             },
-        ) {
-            log::error!("source text recording stopped accepting data: {error}");
-        }
+        )
+    {
+        log::error!("source text recording stopped accepting data: {error}");
     }
     plane
         .source_texts

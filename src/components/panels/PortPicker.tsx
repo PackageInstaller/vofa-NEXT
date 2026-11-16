@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useAppStore } from '../../store/appStore';
-import { t } from '../../i18n';
-import { RefreshCw, Search, Usb } from 'lucide-react';
+import { translate } from '../../i18n';
+import { RefreshCw, Usb } from 'lucide-react';
 import type { PortInfo } from '../../types';
 import { activateOnKeyboard } from '../../lib/utils/a11y';
+import { SearchInput } from '../ui/SearchInput';
 
 /// 端口条目 (端口信息 + 在原始列表中的索引)
 interface PortEntry {
@@ -88,34 +89,30 @@ export function PortPicker({
     <div className="mb-2">
       <div className="flex gap-2 items-center mb-2 px-0.5">
         <span className="block text-[11px] font-medium uppercase tracking-wider text-text-secondary m-0 flex-1">
-          {t(lang, 'portName')}
+          {translate('portName', lang)}
         </span>
         <button
           className="w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer"
-          title={t(lang, 'refresh')}
+          title={translate('refresh', lang)}
           onClick={() => { void refreshPorts(); }}
         >
           <RefreshCw size={13} />
         </button>
       </div>
-      <div className="flex items-center gap-1.5 h-7 bg-bg-input border border-border rounded-md px-2 mb-2 text-text-secondary focus-within:border-accent transition-colors">
-        <Search size={12} className="flex-shrink-0" />
-        <input
-          type="text"
-          className="search-input bg-transparent border-none h-full flex-1 focus:outline-none text-text-primary text-xs"
-          placeholder={lang === 'zh' ? '筛选端口...' : 'Filter ports...'}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-      </div>
+      <SearchInput
+        className="w-full mb-2"
+        placeholder={translate('portFilterPlaceholder', lang)}
+        value={filter}
+        onChange={setFilter}
+      />
       <div className="flex flex-col gap-1">
         {ports.length === 0 ? (
           <div className="p-3 text-text-secondary text-xs text-center">
-            {lang === 'zh' ? '未发现串口' : 'No ports found'}
+            {translate('portsNoneFound', lang)}
           </div>
         ) : filteredGroups.length === 0 ? (
           <div className="p-3 text-text-secondary text-xs text-center">
-            {lang === 'zh' ? '无匹配端口' : 'No matching ports'}
+            {translate('portsNoMatch', lang)}
           </div>
         ) : (
           filteredGroups.map((group) => {
@@ -145,7 +142,7 @@ export function PortPicker({
             return (
               <div
                 key={group.key}
-                className={`group px-2 py-2 rounded-md cursor-pointer flex items-start gap-2 border transition-all duration-150 ${
+                className={`group px-2 py-2 rounded-md cursor-pointer flex items-start gap-2 border motion-transition ${
                   selected
                     ? 'bg-bg-active border-accent/50 shadow-[0_1px_4px_rgba(0,0,0,0.3)]'
                     : 'border-transparent hover:bg-bg-hover hover:border-border'

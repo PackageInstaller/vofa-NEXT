@@ -1,11 +1,8 @@
 import type { ComponentType } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
-import type { DomainType, WidgetConfig } from '../../types';
-import type { DerivedPort, NodePortTable } from '../../lib/utils/connectionRules';
-import { getWidgetPorts } from './WidgetPorts';
-import { widgetMinSize, type WidgetSizeLimits } from '../../lib/utils/widgetSize';
-import { isRawDataPreset, protocolPortNames } from '../../lib/utils/protocolSchema';
-import type { ProtocolNodeData } from '../../store/appStoreHelpers';
+import type { DomainType } from '../../types';
+import type { DerivedPort, NodePortTable, PortInfo } from '../../lib/utils/connectionRules';
+import { getDescribeEntry, describeDomainToUi } from '../../lib/models/describeStore';
 import type { AcquisitionNodeData } from '../../lib/acquisition/acquisitionNodes';
 import { WidgetNode } from './WidgetNode';
 import { AcquisitionNode } from './AcquisitionNode';
@@ -16,21 +13,33 @@ import { AcquisitionProperties } from '../acquisition/AcquisitionProperties';
 import { ProtocolProperties } from './ProtocolProperties';
 
 export type CanvasNodeType = 'acquisition' | 'point-selector' | 'protocol' | 'widget';
-type PropertyProps = { node: Node };
-type PortContext = {
+interface PropertyProps { node: Node }
+interface PortContext {
   derivedPorts?: Record<string, { ports?: DerivedPort[] }>;
   detectedChannels?: Record<string, number | null>;
-};
+}
 
+/// 节点类型的三个消费者: React Flow 渲染 (renderer)、属性面板 (properties)、
+/// 连线校验/AI 端口暴露 (ports)。尺寸限制统一走 `widgetMinSize` (WidgetNode
+/// 自取), 本表不再重复声明 — 曾经的 `size()` 与 `NODE_REGISTRY` 导出无消费者,
+/// 已随本次加载面规范化删除。
 export interface NodeDefinition {
   renderer: ComponentType<NodeProps>;
   properties: ComponentType<PropertyProps>;
   ports(node: Node, context: PortContext): NodePortTable;
-  size(node: Node): WidgetSizeLimits;
 }
 
 const domain = (value: string): DomainType =>
   value === 'points' ? 'points' : value === 'bytes' ? 'bytes' : value === 'string' ? 'string' : 'time';
+
+/// 描述端口 → 前端端口表 (NodePortDomain wire 与 graph:derived 同源)
+function describePorts(nodeId: string): NodePortTable {
+  const description = getDescribeEntry(nodeId).description;
+  if (!description) return { inputs: [], outputs: [] };
+  const toUi = (ports: typeof description.inputs): PortInfo[] =>
+    ports.map((port) => ({ id: port.handle, domain: describeDomainToUi(port.domain) }));
+  return { inputs: toUi(description.inputs), outputs: toUi(description.outputs) };
+}
 
 const definitions: Record<CanvasNodeType, NodeDefinition> = {
   acquisition: {
@@ -44,7 +53,6 @@ const definitions: Record<CanvasNodeType, NodeDefinition> = {
         outputs: ports.filter(port => port.direction !== 'input').map(map),
       };
     },
-    size: () => ({ minW: 180, minH: 90 }),
   },
   'point-selector': {
     renderer: PointSelectorNode,
@@ -53,35 +61,26 @@ const definitions: Record<CanvasNodeType, NodeDefinition> = {
       inputs: [{ id: 'points', domain: 'points' }],
       outputs: (node.data.points as string[]).map(id => ({ id, domain: 'time' })),
     }),
-    size: () => ({ minW: 180, minH: 90 }),
   },
   protocol: {
     renderer: ProtocolNode,
     properties: ProtocolProperties,
     ports(node, context) {
-      const data = node.data as ProtocolNodeData;
+      // 运行时检测的派生端口 (graph:derived) 优先; 静态模型视图来自
+      // describe_node_documents — 前端不再本地派生协议端口
       const derived = context.derivedPorts?.[node.id]?.ports;
-      const names = derived?.length
-        ? derived.map(port => ({ id: port.name, domain: port.domain === 'Spectrum' ? 'freq' : port.domain === 'String' ? 'string' : 'time' as DomainType }))
-        : protocolPortNames(data, context.detectedChannels?.[node.id] ?? null)
-          .map(id => ({ id, domain: isRawDataPreset(data) && id === 'str' ? 'string' : 'time' as DomainType }));
+      const names: PortInfo[] = derived?.length
+        ? derived.map(port => ({ id: port.name, domain: port.domain === 'Spectrum' ? 'freq' : port.domain === 'String' ? 'string' : 'time' }))
+        : describePorts(node.id).outputs;
       return { inputs: [{ id: 'in', domain: 'bytes' }], outputs: [{ id: 'out', domain: 'bytes' }, ...names] };
     },
-    size: () => ({ minW: 180, minH: 90 }),
   },
   widget: {
     renderer: WidgetNode,
     properties: WidgetProperties,
-    ports(node) {
-      const widget = node.data.widget as WidgetConfig;
-      if (widget.kind === 'RawData') return { inputs: [], outputs: [] };
-      return getWidgetPorts(widget);
-    },
-    size: node => widgetMinSize((node.data.widget as WidgetConfig).kind),
+    ports: node => describePorts(node.id),
   },
 };
-
-export const NODE_REGISTRY = definitions;
 
 export function nodeDefinition(node: Node): NodeDefinition {
   const definition = node.type && definitions[node.type as CanvasNodeType];

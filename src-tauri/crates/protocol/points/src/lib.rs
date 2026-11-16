@@ -5,6 +5,7 @@
 //! preserved at the cold configuration/inspection boundary.
 
 pub mod projection;
+pub mod scale;
 
 use flow::FlowEnvelope;
 use serde::{Deserialize, Serialize};
@@ -17,7 +18,7 @@ use std::collections::BTreeMap;
 pub struct PointId(pub String);
 
 /// Fully qualified point key.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PointKey {
     pub source_id: flow::SourceId,
@@ -25,7 +26,7 @@ pub struct PointKey {
 }
 
 /// Ordered field of a structured value.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct StructField {
     pub name: String,
@@ -33,20 +34,33 @@ pub struct StructField {
 }
 
 /// Lossless protocol-neutral value representation.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum PointValue {
     Null,
     Bool(bool),
-    I64(#[serde(with = "signed_string")] i64),
-    U64(#[serde(with = "unsigned_string")] u64),
+    I64(
+        #[serde(with = "signed_string")]
+        #[ts(type = "string")]
+        i64,
+    ),
+    U64(
+        #[serde(with = "unsigned_string")]
+        #[ts(type = "string")]
+        u64,
+    ),
     F64(f64),
     Decimal(String),
     String(String),
     Bytes(Vec<u8>),
-    DateTime(#[serde(with = "signed_string")] i64),
+    DateTime(
+        #[serde(with = "signed_string")]
+        #[ts(type = "string")]
+        i64,
+    ),
     Enum {
         #[serde(with = "signed_string")]
+        #[ts(type = "string")]
         value: i64,
         label: Option<String>,
     },
@@ -55,7 +69,7 @@ pub enum PointValue {
 }
 
 mod signed_string {
-    use serde::{de::Error, Deserialize, Deserializer, Serializer};
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
 
     // serde(with = ...) 的 serialize 契约要求 &T 形参, 8 字节原语按引用传入
     // 是外部接口约束而非风格选择
@@ -72,7 +86,7 @@ mod signed_string {
 }
 
 mod unsigned_string {
-    use serde::{de::Error, Deserialize, Deserializer, Serializer};
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn serialize<S: Serializer>(value: &u64, serializer: S) -> Result<S::Ok, S::Error> {
@@ -86,7 +100,7 @@ mod unsigned_string {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum Validity {
     Good,
@@ -104,7 +118,7 @@ pub mod quality_flags {
 }
 
 /// Protocol-native status retained alongside portable quality.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeStatus {
     pub domain: String,
@@ -112,7 +126,7 @@ pub struct NativeStatus {
     pub detail: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PointQuality {
     pub validity: Validity,
@@ -136,7 +150,7 @@ impl PointQuality {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PointSample {
     pub key: PointKey,
@@ -147,14 +161,14 @@ pub struct PointSample {
     pub received_time_unix_ns: i64,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum DeliveryClass {
     State,
     Event,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PointBatch {
     pub delivery: DeliveryClass,
@@ -163,7 +177,7 @@ pub struct PointBatch {
 
 pub type PointEnvelope = FlowEnvelope<PointBatch>;
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum PointDataType {
     Bool,
@@ -184,7 +198,7 @@ pub enum PointDataType {
     Struct,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum AccessLevel {
     ReadOnly,
@@ -193,14 +207,14 @@ pub enum AccessLevel {
 }
 
 /// Driver-owned address retained as structured cold-path data.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeAddress {
     pub domain: String,
     pub value: Value,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PointDescriptor {
     pub id: PointId,
@@ -213,7 +227,7 @@ pub struct PointDescriptor {
     pub native_address: NativeAddress,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum AcquisitionMode {
     Auto,
@@ -222,7 +236,7 @@ pub enum AcquisitionMode {
     OnDemand,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum Priority {
     Low,
@@ -230,7 +244,7 @@ pub enum Priority {
     High,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct AcquisitionIntent {
     pub mode: AcquisitionMode,
@@ -240,26 +254,26 @@ pub struct AcquisitionIntent {
     pub delivery: DeliveryClass,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadRequest {
     pub points: Vec<PointId>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadResult {
     pub batch: PointEnvelope,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WriteItem {
     pub point_id: PointId,
     pub value: PointValue,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WriteRequest {
     pub correlation_id: String,
@@ -268,53 +282,42 @@ pub struct WriteRequest {
     pub items: Vec<WriteItem>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WriteItemResult {
     pub point_id: PointId,
     pub quality: PointQuality,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WriteResult {
     pub correlation_id: String,
     pub items: Vec<WriteItemResult>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// 手动 TS 实现: wire 为纯字符串 (serde transparent), derive 会因无法解析
+// transparent 属性产生误报警告, 这里直接给出与 wire 一致的 string 投影。
+impl ts_rs::TS for PointId {
+    type WithoutGenerics = Self;
+    type OptionInnerType = Self;
 
-    #[test]
-    fn wide_integers_serialize_as_strings() {
-        assert_eq!(
-            serde_json::to_value(PointValue::U64(u64::MAX)).unwrap(),
-            serde_json::json!({"kind": "u64", "value": "18446744073709551615"})
-        );
+    fn name(_: &ts_rs::Config) -> String {
+        "PointId".to_owned()
     }
 
-    #[test]
-    fn bad_quality_never_requires_a_fake_value() {
-        let sample = PointSample {
-            key: PointKey {
-                source_id: flow::SourceId::new("plc").unwrap(),
-                point_id: PointId("temperature".into()),
-            },
-            value: None,
-            quality: PointQuality::bad(
-                quality_flags::COMM_FAILURE,
-                NativeStatus {
-                    domain: "modbus".into(),
-                    code: "gatewayTargetFailed".into(),
-                    detail: None,
-                },
-            ),
-            source_time_unix_ns: None,
-            server_time_unix_ns: None,
-            received_time_unix_ns: 1,
-        };
-        assert!(sample.value.is_none());
-        assert_eq!(sample.quality.validity, Validity::Bad);
+    fn inline(_: &ts_rs::Config) -> String {
+        "string".to_owned()
+    }
+
+    fn decl(cfg: &ts_rs::Config) -> String {
+        format!("type {} = {};", Self::name(cfg), Self::inline(cfg))
+    }
+
+    fn output_path() -> Option<std::path::PathBuf> {
+        Some("PointId.ts".into())
     }
 }
+
+#[cfg(test)]
+mod tests;

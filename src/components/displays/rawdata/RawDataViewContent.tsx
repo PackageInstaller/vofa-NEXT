@@ -3,6 +3,7 @@ import type { RawDataLineSource } from '../../../lib/buffers/dataBuffer';
 import type { Lang } from '../../../i18n';
 import type { RawDataGrouping, RawDataRepr, HexColorMode } from './rawDataViewHelpers';
 import { ROW_HEIGHT, HeaderBytes } from './rawDataViewHelpers';
+import { isTextEncoding } from '../../../lib/utils/textEncoding';
 import { Row } from './RawDataRow';
 import type { useSelection } from '../../../lib/hooks/useSelection';
 
@@ -21,9 +22,6 @@ interface Props {
   onRowMouseDown: (e: React.MouseEvent, index: number) => void;
   // scroll
   parentRef: React.RefObject<HTMLDivElement | null>;
-  userScrolledRef: React.MutableRefObject<boolean>;
-  isAutoScrollingRef: React.MutableRefObject<boolean>;
-  scrollAnimRef: React.MutableRefObject<number | null>;
   onScroll: () => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
 }
@@ -49,6 +47,8 @@ export function RawDataViewContent({
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 5,
+    // 位置 key: 环形缓冲滑动后同 index 内容会变, 与 version 击穿配合保证刷新 —
+    // 刻意牺牲 React 复用语义换取正确性
     getItemKey: (index) => index,
   });
 
@@ -63,7 +63,13 @@ export function RawDataViewContent({
       {showOffset && grouping === 'grid' && (
         <span className="text-text-secondary text-xs font-mono min-w-[80px] text-right">Offset</span>
       )}
-      {grouping === 'line' ? (
+      {isTextEncoding(repr) ? (
+        <div className="flex-1">
+          <span className="text-text-secondary text-xs font-mono">
+            {repr === 'gbk' ? 'GBK' : 'UTF-8'}
+          </span>
+        </div>
+      ) : grouping === 'line' ? (
         <>
           <div className="flex-1" />
           {repr === 'hex' && (
@@ -134,6 +140,7 @@ export function RawDataViewContent({
                   hexColorMode={hexColorMode}
                   isSelected={selection.isSelected(virtualRow.index)}
                   version={version}
+                  lang={lang}
                   onMouseDown={onRowMouseDown}
                 />
               ))}

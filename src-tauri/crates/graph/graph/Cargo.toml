@@ -1,9 +1,13 @@
 [package]
-name = "graph"
+name = "lissio-graph"
 description = "Lissio 节点图引擎门面 — 驱动 HIR/平面投影/Lowering 三段式编译流水线, 保有 CompiledGraph 与慢路径求值"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "graph"
 
 [lints]
 workspace = true
@@ -24,6 +28,8 @@ eval = { workspace = true }
 [dev-dependencies]
 graph_testkit = { workspace = true }
 criterion = { workspace = true }
+# 测试专用: 构造设备树来源标记 (测试依赖允许跨越生产边界)
+data_model = { workspace = true }
 
 [[bench]]
 name = "compile_bench"

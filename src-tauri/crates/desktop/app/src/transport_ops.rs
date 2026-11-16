@@ -6,95 +6,127 @@
 //! L1 类型 (AcquisitionRuntime) 经 [`runtime`] 门面引用, 不直连 transport crate。
 
 use can::CanFrame;
-use data_model::{ConnectionState, Error, Result, WidgetBinding};
+use data_model::{ConnectionState, WidgetBinding};
 use error::ConfigError;
-use events::{emit_transport_state, notify};
+use error::{AppError as Error, Result};
+use events::{BackendEventSink, EventSinkHandle, NotifyLevel, emit_transport_state};
 use schema_types::{ProtocolConfig, ProtocolSchema, TestDataLink};
 use serde::Serialize;
-use tauri::AppHandle;
+
+use std::time::Instant;
 
 use crate::app_state::AppState;
+
+/// 打开设备会话并在可用时挂载字节流读任务。
+///
+/// 无 Tauri 版本 — [`AppState::open_device`]、MCP `open_endpoint` 工具与 CLI 共用
+/// 同一条打开路径 (open + attach 配对、断连事件、订阅编排的不变量只此一份)。
+///
+/// `protocol` 与 `schema` 仅被 TestData 用作生成数据的线缆格式参考, 其他传输类型忽略。
+pub async fn open_device_session(
+    transport: &acquisition::AcquisitionRuntime,
+    data_plane: &pipeline::DataPlaneState,
+    sink: &EventSinkHandle,
+    node: data_model::device_tree::NodeDecl,
+) -> std::result::Result<data_model::device_tree::NodeSnapshot, String> {
+    let id = node.id.clone();
+    let payload = data_model::device::DriverPayload {
+        driver_id: data_model::device_tree::DriverId::new(node.driver.as_str()),
+        schema_version: node.schema_version,
+        payload: node.config.clone(),
+    };
+    let snapshot = transport.open_node(node).await.map_err(|e| e.to_string())?;
+    if snapshot.capabilities.byte_source {
+        data_plane.attach(sink.clone(), id.as_str()).await;
+    }
+    if snapshot.capabilities.subscribe {
+        let points = transport
+            .descriptors(&payload)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|p| p.access != points::AccessLevel::WriteOnly)
+            .map(|p| p.id)
+            .collect::<Vec<_>>();
+        if !points.is_empty() {
+            let intent = acquisition::SubscriptionIntent {
+                points,
+                acquisition: points::AcquisitionIntent {
+                    mode: points::AcquisitionMode::Auto,
+                    requested_period_ms: None,
+                    deadband: None,
+                    priority: points::Priority::Normal,
+                    delivery: points::DeliveryClass::State,
+                },
+            };
+            if let Err(error) = transport.subscribe(&id, intent).await {
+                data_plane.detach(id.as_str());
+                transport.close(&id).await;
+                return Err(error.to_string());
+            }
+        }
+    }
+    emit_transport_state(sink.as_ref(), id.as_str(), ConnectionState::Connected);
+    Ok(snapshot)
+}
+
+/// 关闭设备连接 (node_id = 图中设备节点 id) — 无 Tauri 版本。
+pub async fn close_device_session(
+    transport: &acquisition::AcquisitionRuntime,
+    data_plane: &pipeline::DataPlaneState,
+    sink: &dyn BackendEventSink,
+    node_id: &data_model::device_tree::NodeId,
+) -> Result<()> {
+    let started = Instant::now();
+    log::info!(
+        "连接关闭开始: node={node_id}, open_nodes={}, {}",
+        transport.list_open().len(),
+        data_plane.lifecycle_summary()
+    );
+    data_plane.mark_source_disconnected(node_id.as_str());
+    data_plane.detach(node_id.as_str());
+    transport.close(node_id).await;
+    emit_transport_state(sink, node_id.as_str(), ConnectionState::Disconnected);
+    log::info!(
+        "连接关闭完成: node={node_id}, elapsed_ms={}, open_nodes={}, {}",
+        started.elapsed().as_millis(),
+        transport.list_open().len(),
+        data_plane.lifecycle_summary()
+    );
+    sink.notify(NotifyLevel::Info, "连接已断开");
+    Ok(())
+}
 
 impl AppState {
     /// Open a device session and attach its byte stream when available.
     ///
-    /// `protocol` 与 `schema` 仅被 TestData 用作生成数据的线缆格式参考, 其他传输类型忽略。
     /// 成功后挂载数据平面读任务 (subscribe → 字节路由 → 数值平面)。
     pub async fn open_device(
         &self,
-        app: &AppHandle,
-        spec: data_model::device::EndpointSpec,
-    ) -> std::result::Result<acquisition::EndpointSnapshot, String> {
-        let id = spec.id.0.clone();
-        let snapshot = self
-            .transport
-            .open_endpoint(spec)
-            .await
-            .map_err(|e| e.to_string())?;
-        if snapshot
-            .capabilities
-            .as_ref()
-            .is_some_and(|c| c.available.byte_source)
-        {
-            self.data_plane.attach(app.clone(), &id).await;
-        }
-        if snapshot
-            .capabilities
-            .as_ref()
-            .is_some_and(|c| c.available.subscribe)
-        {
-            let points = snapshot
-                .points
-                .iter()
-                .filter(|p| p.access != points::AccessLevel::WriteOnly)
-                .map(|p| p.id.clone())
-                .collect::<Vec<_>>();
-            if !points.is_empty() {
-                let intent = acquisition::SubscriptionIntent {
-                    points,
-                    acquisition: points::AcquisitionIntent {
-                        mode: points::AcquisitionMode::Auto,
-                        requested_period_ms: None,
-                        deadband: None,
-                        priority: points::Priority::Normal,
-                        delivery: points::DeliveryClass::State,
-                    },
-                };
-                if let Err(error) = self
-                    .transport
-                    .subscribe(&data_model::device::EndpointId(id.clone()), intent)
-                    .await
-                {
-                    self.data_plane.detach(&id);
-                    self.transport.close(&id).await;
-                    return Err(error.to_string());
-                }
-            }
-        }
-        emit_transport_state(app, &id, ConnectionState::Connected);
-        Ok(snapshot)
+        sink: &EventSinkHandle,
+        node: data_model::device_tree::NodeDecl,
+    ) -> std::result::Result<data_model::device_tree::NodeSnapshot, String> {
+        open_device_session(&self.transport, &self.data_plane, sink, node).await
     }
 
     /// 关闭设备连接 (node_id = 图中设备节点 id)
-    pub async fn close_transport(&self, app: &AppHandle, node_id: &str) -> Result<()> {
-        self.data_plane.mark_source_disconnected(node_id);
-        self.data_plane.detach(node_id);
-        self.transport.close(node_id).await;
-        emit_transport_state(app, node_id, ConnectionState::Disconnected);
-        log::info!("连接已关闭: {node_id}");
-        notify::disconnected(app);
-        Ok(())
+    pub async fn close_transport(
+        &self,
+        sink: &dyn BackendEventSink,
+        node_id: &data_model::device_tree::NodeId,
+    ) -> Result<()> {
+        close_device_session(&self.transport, &self.data_plane, sink, node_id).await
     }
 
     /// 发送原始字节 (node_id = 目标设备节点 id)
-    pub async fn send_raw(&self, node_id: &str, data: Vec<u8>) -> Result<()> {
-        self.transport.send(node_id, &data)?;
-        // TX 方向字节进该源的 raw 收集器 (收集器在 attach 时已建; 未打开时上面的 send 已报错)
-        self.data_plane
-            .raw_collector_for(node_id)
-            .lock()
-            .push_chunk(data_model::now_us(), raw_data::RawDataDirection::Tx, &data);
-        Ok(())
+    ///
+    /// TX 字节经 `TransportHandle::send` 统一回环到本节点接收广播, 由数据平面
+    /// 读任务按信封方向以 Tx 收集一次 — 此处不再旁路重复推入 raw 收集器。
+    pub async fn send_raw(
+        &self,
+        node_id: &data_model::device_tree::NodeId,
+        data: Vec<u8>,
+    ) -> Result<()> {
+        self.transport.send(node_id, &data)
     }
 
     /// TextOut 手动发送 — 立即把 textout 节点当前图内文本发往其目标 Transport
@@ -136,6 +168,12 @@ impl AppState {
         let mut payload = text;
         payload.push_str(spec.newline_suffix);
         let target = spec.target_transport.to_string();
+        let target_text = target.clone();
+        let target = data_model::device_tree::NodeId::new(target).map_err(|_| {
+            Error::Config(ConfigError::NodeNotFound {
+                node_id: target_text,
+            })
+        })?;
         self.transport.send(&target, payload.as_bytes())?;
         Ok(())
     }
@@ -170,14 +208,18 @@ impl AppState {
                         Error::Config(ConfigError::ProtocolNodeNotFound { node_id: pn })
                     })?;
                 let engine = st.lock().engine.clone();
-                let bytes = engine.lock().encode_channel(channel, value);
-                bytes
+                engine.lock().encode_channel(channel, value)
             }
             WidgetBinding::Manual { template, .. } => template
                 .replace(concat!("{", "value", "}"), &value.to_string())
                 .into_bytes(),
         };
-        self.send_raw(node_id, data).await
+        let node = data_model::device_tree::NodeId::new(node_id).map_err(|_| {
+            Error::Config(ConfigError::NodeNotFound {
+                node_id: node_id.to_string(),
+            })
+        })?;
+        self.send_raw(&node, data).await
     }
 
     /// 发送 CAN 帧
@@ -204,7 +246,7 @@ impl AppState {
                 routes.iter().find_map(|r| {
                     matches!(
                         nodes.get(&r.target).map(|n| &n.kind),
-                        Some(pipeline::NodeKind::Protocol { .. })
+                        Some(kind::NodeKind::Protocol { .. })
                     )
                     .then(|| r.target.clone())
                 })
@@ -225,13 +267,19 @@ impl AppState {
                     })
                 })?;
             let engine = st.lock().engine.clone();
-            let bytes = engine.lock().encode_can(&frame);
-            bytes
+            engine.lock().encode_can(&frame)
         };
         if data.is_empty() {
             return Ok(()); // 非 CAN 协议, 忽略
         }
-        self.transport.send(node_id, &data)
+        self.transport.send(
+            &data_model::device_tree::NodeId::new(node_id).map_err(|_| {
+                Error::Config(ConfigError::NodeNotFound {
+                    node_id: node_id.to_string(),
+                })
+            })?,
+            &data,
+        )
     }
 
     /// 运行时热更新传输节点的链路配置 (图连接/协议配置变化后由前端推送)
@@ -245,8 +293,16 @@ impl AppState {
         schema: Option<ProtocolSchema>,
         test_data_config: Option<data_model::TestDataConfig>,
     ) -> Result<()> {
-        self.transport
-            .update_link(node_id, TestDataLink { protocol, schema }, test_data_config)
+        let node_id = data_model::device_tree::NodeId::new(node_id).map_err(|_| {
+            Error::Config(ConfigError::NodeNotFound {
+                node_id: node_id.to_string(),
+            })
+        })?;
+        self.transport.update_link(
+            &node_id,
+            TestDataLink { protocol, schema },
+            test_data_config,
+        )
     }
 }
 
@@ -280,8 +336,13 @@ impl AppState {
         //    回环与串口开关无关: 未连接时跳过发送, 仅做本地解析对照
         {
             let manager = &self.transport;
-            if manager.state(node_id) == Some(ConnectionState::Connected) {
-                manager.send(node_id, &data)?;
+            let node = data_model::device_tree::NodeId::new(node_id).map_err(|_| {
+                Error::Config(ConfigError::NodeNotFound {
+                    node_id: node_id.to_string(),
+                })
+            })?;
+            if manager.state(&node) == Some(ConnectionState::Connected) {
+                manager.send(&node, &data)?;
             }
         }
 
@@ -297,7 +358,10 @@ impl AppState {
                     node_id: protocol_node.to_string(),
                 })
             })?;
-        let out = st.lock().engine.lock().feed(&data);
+        let mut out = st.lock().engine.lock().feed(&data);
+        for frame in &mut out.can_frames {
+            frame.direction = can::CanDirection::Tx;
+        }
         let frames = out.frames;
         let can_count = out.can_frames.len();
 
@@ -317,3 +381,50 @@ impl AppState {
         })
     }
 }
+
+/// CAN 波特率决策 (纯函数) — 优先级: 显式覆盖 (>0) > 传输配置 > 500k 默认。
+///
+/// 默认值不可省略: 前端可能提交 0, 直接用于负载率换算会除零。
+pub const fn can_bitrate_choice(override_bps: Option<u32>, transport_bps: Option<u32>) -> u32 {
+    if let Some(bps) = override_bps
+        && bps > 0
+    {
+        return bps;
+    }
+    match transport_bps {
+        Some(bps) => bps,
+        None => 500_000,
+    }
+}
+
+/// 读取指定设备节点的 CAN 波特率与来源标签 (`slcan` / `candle` / `default`)。
+///
+/// 前端设置面板据此展示默认值; 与 [`can_bitrate_bps`] 共用同一份配置匹配。
+pub fn can_bitrate_with_source(state: &AppState, node_id: &str) -> (u32, &'static str) {
+    let node = data_model::device_tree::NodeId::new(node_id).ok();
+    match node.and_then(|node| state.transport.config(&node)) {
+        Some(data_model::TransportConfig::Slcan(config)) => (config.can_bitrate.bps(), "slcan"),
+        Some(data_model::TransportConfig::CandleLight(config)) => {
+            (config.can_bitrate.bps(), "candle")
+        }
+        _ => (can_bitrate_choice(None, None), "default"),
+    }
+}
+
+/// 解析有效 CAN 波特率 (bps) — 取传输配置后按 [`can_bitrate_choice`] 决策。
+///
+/// 传输配置仅 Slcan / CandleLight 携带 CAN 波特率, 其他连接方式回落默认值。
+/// 桌面 IPC 与 HTTP-RPC 的 CAN 负载统计共用此判定。
+pub fn can_bitrate_bps(state: &AppState, node_id: &str, override_bps: Option<u32>) -> u32 {
+    let node = data_model::device_tree::NodeId::new(node_id).ok();
+    let transport_bps = match node.and_then(|node| state.transport.config(&node)) {
+        Some(data_model::TransportConfig::Slcan(config)) => Some(config.can_bitrate.bps()),
+        Some(data_model::TransportConfig::CandleLight(config)) => Some(config.can_bitrate.bps()),
+        _ => None,
+    };
+    can_bitrate_choice(override_bps, transport_bps)
+}
+
+#[cfg(test)]
+#[path = "transport_ops_bitrate_tests.rs"]
+mod bitrate_tests;

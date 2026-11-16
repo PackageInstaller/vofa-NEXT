@@ -3,11 +3,11 @@
 //! 层级: L3 app (app_state)。引擎重建与 TestData 断连编排属于应用核心;
 //! 引擎工厂在 [`pipeline::protocol_factory`] (L2), L1 协议 crate 不被本 crate 直连。
 
-use data_model::{ConnectionState, Error, Result, TransportConfig};
+use data_model::{ConnectionState, TransportConfig};
 use error::ConfigError;
-use events::emit_transport_state;
+use error::{AppError as Error, Result};
+use events::{BackendEventSink, emit_transport_state};
 use schema_types::ProtocolConfig;
-use tauri::AppHandle;
 
 use crate::app_state::AppState;
 
@@ -22,23 +22,23 @@ impl AppState {
     /// 生成格式与解析引擎不匹配, 因此强制断连让用户 reconnect。
     pub async fn set_protocol(
         &self,
-        app: &AppHandle,
+        sink: &dyn BackendEventSink,
         node_id: &str,
         config: ProtocolConfig,
     ) -> Result<()> {
         // 协议变化 → TestData 生成格式失效: 断开所有打开的 TestData 传输
         {
             let manager = &self.transport;
-            let test_nodes: Vec<String> = manager
+            let test_nodes: Vec<data_model::device_tree::NodeId> = manager
                 .list_open()
                 .into_iter()
                 .filter(|id| matches!(manager.config(id), Some(TransportConfig::TestData(_))))
                 .collect();
             if !test_nodes.is_empty() {
                 for id in &test_nodes {
-                    self.data_plane.detach(id);
+                    self.data_plane.detach(id.as_str());
                     manager.close(id).await;
-                    emit_transport_state(app, id, ConnectionState::Disconnected);
+                    emit_transport_state(sink, id.as_str(), ConnectionState::Disconnected);
                 }
                 log::info!(
                     "协议切换: 自动断开 TestData 连接 ({} 个), 请重新连接",

@@ -1,15 +1,9 @@
-import { t } from '../../../i18n';
+import { translate } from '../../../i18n';
 import type { Lang } from '../../../i18n';
-import { formatTime } from './rawDataViewHelpers';
+import { EscapedText, formatTime } from './rawDataViewHelpers';
+import type { RawDataStringRow } from './useRawDataBuffer';
 import type { PortSampleStatus } from '../../../lib/data/sampleProtocol';
 import { useVirtualizer } from '@tanstack/react-virtual';
-
-/// 字符串通道行 (值变化历史) — 与数值行共用同一虚拟列表 (二选一)
-export interface RawDataStringRow {
-  /// 前端接收时刻 (字符串平面为 latest-value 快照, 无逐次时间戳)
-  ts: number;
-  text: string;
-}
 
 interface Props {
   numRows: { seq: number; ts: number; value: number }[];
@@ -56,7 +50,7 @@ export function RawDataViewNumericContent({
       measureElement: (el: HTMLElement) => el.getBoundingClientRect().height,
     }),
     getItemKey: (index) =>
-      isString ? `${rows[index]?.ts ?? 0}-${index}` : numRows[index]?.seq ?? index,
+      isString ? rows[index]?.seq ?? index : numRows[index]?.seq ?? index,
   });
   const labels =
     lang === 'zh'
@@ -79,7 +73,7 @@ export function RawDataViewNumericContent({
           dropped: 'Ingress dropped',
         };
   const emptyLabel = isString
-    ? t(lang, 'rawDataStringEmpty')
+    ? translate('rawDataStringEmpty', lang)
     : error ?? (status === 'channel_out_of_range'
         ? labels.channel
         : status === 'disconnected'
@@ -88,7 +82,7 @@ export function RawDataViewNumericContent({
             ? labels.overrun
             : status === 'waiting'
               ? labels.waiting
-              : t(lang, 'rawDataEmpty'));
+              : translate('rawDataEmpty', lang));
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden font-mono animate-rawdata-enter select-text">
       {(previewSkipped > 0 || retentionEvicted > 0 || ingressDropped > 0) && (
@@ -121,7 +115,7 @@ export function RawDataViewNumericContent({
                       </span>
                     )}
                     <span className="text-text-primary whitespace-pre-wrap break-all min-w-0">
-                      {s.text}
+                      <EscapedText text={s.text} />
                     </span>
                   </div>
                 );

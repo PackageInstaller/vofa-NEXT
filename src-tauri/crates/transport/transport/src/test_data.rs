@@ -4,29 +4,21 @@
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss
 )]
+use data_model::simulation::samples_per_message;
 use data_model::{TestDataConfig, TestSignal};
-use schema_types::{encode_by_blocks, ProtocolConfig, SchemaPreset, TestDataLink};
+use schema_types::{ProtocolConfig, SchemaPreset, TestDataLink, encode_by_blocks};
 use std::fmt::Write as _;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, watch};
 
-use acquisition::{ConnectionControl, TransportBackend, TransportConnection};
+use acquisition::{ByteMessage, ConnectionControl, TransportBackend, TransportConnection};
 use async_trait::async_trait;
 
-/// TestData 每条广播消息覆盖的目标采样时长。数据平面使用同一换算规则把
-/// `broadcast::Lagged(消息数)` 还原成丢失帧数 (经 [`samples_per_message`] 折算)。
-const MESSAGE_SAMPLE_SECONDS: f64 = 0.005;
-
-/// 每条广播消息覆盖的采样数 — 生成器与数据平面共用的消息大小契约。
-/// 数据平面据此把 `broadcast::Lagged(消息数)` 折算为丢失帧数, 进而还原
-/// 采样时间戳缺口。修改消息节拍时必须保持两侧一致。
-pub fn samples_per_message(sample_rate: f32) -> u64 {
-    (f64::from(sample_rate.max(1.0)) * MESSAGE_SAMPLE_SECONDS)
-        .ceil()
-        .max(1.0) as u64
-}
+// 消息节拍契约 (每条消息覆盖的采样时长、消息大小换算) 的唯一权威已收进
+// `data_model::simulation`: 生成侧 (`byte_simulation`) 与消费侧的 Lagged 折算
+// (`pipeline::data_plane`) 必须用同一份换算, 放在两侧各自的 crate 里会各自演化。
 
 #[derive(Clone)]
 pub struct TestDataRuntime {
@@ -48,7 +40,7 @@ impl ConnectionControl for TestDataControl {
         &self,
         link: TestDataLink,
         config: Option<TestDataConfig>,
-    ) -> data_model::Result<Option<data_model::TransportConfig>> {
+    ) -> error::Result<Option<data_model::TransportConfig>> {
         let config = config.unwrap_or_else(|| self.runtime.borrow().config.clone());
         self.runtime
             .send(TestDataRuntime {
@@ -80,7 +72,7 @@ impl TransportBackend for TestDataBackend {
         &self,
         config: data_model::TransportConfig,
         link: TestDataLink,
-    ) -> data_model::Result<TransportConnection> {
+    ) -> error::Result<TransportConnection> {
         let data_model::TransportConfig::TestData(config) = config else {
             unreachable!("backend selection must call accepts before open")
         };
@@ -100,9 +92,9 @@ impl TransportBackend for TestDataBackend {
 /// 对外仅暴露与串口同构的收发面: 数据经 `broadcast` 字节流广播, 写入经
 /// `write_tx` 回环; 运行状态纯为内部实现细节。
 ///
-/// `link` 决定生成数据的线缆格式 (protocol 为 legacy 配置, schema 为帧 schema):
+/// `link` 决定生成数据的线缆格式 (protocol 为预设配置, schema 为帧 schema):
 /// - schema = Custom 且带 encode 块 → 按 schema 编码块生成
-/// - 否则按 link.protocol 走 legacy 编码:
+/// - 否则按 link.protocol 走预设编码:
 /// - JustFloat → 4 字节 LE float + 帧尾 [0x00,0x00,0x80,0x7f]
 /// - FireWater → ASCII CSV `v1,v2,...,vn\n`
 /// - RawData   → 递增字节流 (无解析)
@@ -116,14 +108,19 @@ impl TransportBackend for TestDataBackend {
 pub fn spawn(
     config: TestDataConfig,
     link: TestDataLink,
-) -> data_model::Result<(
+) -> error::Result<(
     mpsc::Sender<Vec<u8>>,
-    broadcast::Sender<Vec<u8>>,
+    broadcast::Sender<ByteMessage>,
     Arc<AtomicBool>,
     watch::Sender<TestDataRuntime>,
 )> {
     let (data_tx, _) = broadcast::channel(data_model::INGEST_CHANNEL_CAPACITY);
     let (write_tx, mut write_rx) = mpsc::channel::<Vec<u8>>(64);
+    log::info!(
+        "TestData 生成器启动: rate={}/s, channels={}",
+        config.sample_rate,
+        config.channels
+    );
     let (runtime_tx, mut runtime_rx) = watch::channel(TestDataRuntime { config, link });
     let cancel = Arc::new(AtomicBool::new(false));
 
@@ -132,6 +129,8 @@ pub fn spawn(
     let cancel_gen = cancel.clone();
     tokio::spawn(async move {
         let mut sample_idx: u64 = 0;
+        let mut generated_messages = 0_u64;
+        let mut generated_bytes = 0_u64;
         // 采样时钟只由已生成样本数推进，批次调度抖动和热更新不会重置相位。
         let mut sample_time_sec = 0.0_f64;
         let mut previous_sample_dt = None;
@@ -150,14 +149,21 @@ pub fn spawn(
             let msg_interval =
                 Duration::from_secs_f64(samples_per_msg as f64 / f64::from(sample_rate));
             let sample_dt = 1.0_f64 / f64::from(sample_rate);
-            if let Some(previous_dt) = previous_sample_dt.replace(sample_dt) {
-                if (previous_dt - sample_dt).abs() > f64::EPSILON {
-                    // sample_time_sec 指向下一个样本；热更新后把该间隔替换为新间隔，
-                    // 但不改变已经生成的相位历史。
-                    sample_time_sec += sample_dt - previous_dt;
-                }
+            if let Some(previous_dt) = previous_sample_dt.replace(sample_dt)
+                && (previous_dt - sample_dt).abs() > f64::EPSILON
+            {
+                // sample_time_sec 指向下一个样本；热更新后把该间隔替换为新间隔，
+                // 但不改变已经生成的相位历史。
+                sample_time_sec += sample_dt - previous_dt;
             }
+            // 链路热更新必须优先于本轮发送: 截止时刻与更新同时就绪时, 非偏置的
+            // select 会随机选分支, 可能用旧 link 再发一批数据, 订阅方就会先看到
+            // 旧格式 (例如协议子节点已声明 FireWater 却先收到 RawData 二进制)。
             tokio::select! {
+                biased;
+                changed = runtime_rx.changed() => {
+                    if changed.is_err() { break; }
+                }
                 () = tokio::time::sleep_until(next_deadline) => {
                     // 每轮恒定批量；保留截止时间使迟到批次逐轮补齐。
                     next_deadline += msg_interval;
@@ -174,10 +180,9 @@ pub fn spawn(
                         sample_time_sec += sample_dt;
                     }
 
-                    let _ = data_tx_gen.send(data);
-                }
-                changed = runtime_rx.changed() => {
-                    if changed.is_err() { break; }
+                    generated_messages += 1;
+                    generated_bytes = generated_bytes.saturating_add(data.len() as u64);
+                    let _ = data_tx_gen.send(ByteMessage::from_device(data));
                 }
                 data = write_rx.recv() => {
                     // 写入由 TransportHandle::send 统一回环到 data_tx 广播,
@@ -190,7 +195,7 @@ pub fn spawn(
                 break;
             }
         }
-        log::debug!("测试数据生成器退出");
+        log::info!("TestData 生成器退出: messages={generated_messages}, bytes={generated_bytes}");
     });
 
     Ok((write_tx, data_tx, cancel, runtime_tx))
@@ -201,7 +206,7 @@ pub fn spawn(
 /// 编码路径选择:
 /// - schema = Some(Custom) 且 encode = Some → 按 schema 编码块编码 values
 ///   (values 与 decode 块派生的端口列表对齐)
-/// - schema = Some(预设) 或 None → 现有 generate_bytes legacy 路径
+/// - schema = Some(预设) 或 None → generate_bytes 预设编码路径
 fn generate_link_bytes(
     channels: usize,
     signal: TestSignal,
@@ -209,18 +214,17 @@ fn generate_link_bytes(
     link: &TestDataLink,
     sample_idx: u64,
 ) -> Vec<u8> {
-    if let Some(schema) = &link.schema {
-        if schema.preset == SchemaPreset::Custom {
-            if let Some(encode) = &schema.encode {
-                let frame = generate_frame(channels, signal, t);
-                return encode_by_blocks(encode, &schema.port_names(), &frame);
-            }
-        }
+    if let Some(schema) = &link.schema
+        && schema.preset == SchemaPreset::Custom
+        && let Some(encode) = &schema.encode
+    {
+        let frame = generate_frame(channels, signal, t);
+        return encode_by_blocks(encode, &schema.port_names(), &frame);
     }
     generate_bytes(channels, signal, t, &link.protocol, sample_idx)
 }
 
-/// 按协议类型生成线缆格式的字节流 (legacy 路径)
+/// 按协议类型生成线缆格式的字节流 (预设编码路径)
 ///
 /// `pub` 供 data_plane 基准测试构造合成线缆格式字节块 (crate 内测试直接走
 /// 本模块单元测试); 协议层不应直接调用。
@@ -383,7 +387,7 @@ fn generate_frame(channels: usize, signal: TestSignal, t: f64) -> Vec<f32> {
                     let u2 = (seed2.sin() * 12_345.679).fract();
                     let n = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
                     // 标准正态 → 缩放到 0..255
-                    (n * 40.0 + 128.0).clamp(0.0, 255.0) as f32
+                    n.mul_add(40.0, 128.0).clamp(0.0, 255.0) as f32
                 }
                 TestSignal::MultiTone => {
                     // 多频叠加: 基频 + 3次谐波 + 5次谐波
@@ -401,87 +405,5 @@ fn generate_frame(channels: usize, signal: TestSignal, t: f64) -> Vec<f32> {
 /// (JustFloat 帧尾 / FireWater CSV / Slcan ASCII / CandleLight 二进制 /
 /// RawData 计数器 / LogicDecode 字节位) 与长时运行相位精度。
 #[cfg(test)]
-mod tests {
-    use super::{generate_bytes, generate_frame};
-    use data_model::{Parity, StopBits, TestSignal};
-    use logic::LogicDecoderConfig;
-    use schema_types::ProtocolConfig;
-
-    #[test]
-    fn justfloat_format() {
-        let protocol = ProtocolConfig::JustFloat { channels: Some(2) };
-        let data = generate_bytes(2, TestSignal::Sine, 0.0, &protocol, 0);
-        // 2 channels * 4 bytes + 4 byte tail
-        assert_eq!(data.len(), 12);
-        // 帧尾
-        assert_eq!(&data[8..12], &[0x00, 0x00, 0x80, 0x7f]);
-    }
-
-    #[test]
-    fn firewater_format() {
-        let protocol = ProtocolConfig::FireWater { channels: Some(2) };
-        let data = generate_bytes(2, TestSignal::Sine, 0.0, &protocol, 0);
-        let s = String::from_utf8(data).unwrap();
-        assert!(s.ends_with('\n'));
-        assert_eq!(s.matches(',').count(), 1);
-    }
-
-    #[test]
-    fn slcan_format() {
-        let protocol = ProtocolConfig::Slcan;
-        let data = generate_bytes(8, TestSignal::Square, 0.0, &protocol, 0);
-        let s = String::from_utf8(data).unwrap();
-        assert!(s.starts_with('t'));
-        assert!(s.ends_with('\r'));
-        // t + 3 (id) + 1 (dlc) + 16 (8 bytes hex) + 1 (\r) = 22
-        assert_eq!(s.len(), 22);
-    }
-
-    #[test]
-    fn candle_format() {
-        let protocol = ProtocolConfig::CandleLight;
-        let data = generate_bytes(8, TestSignal::Square, 0.0, &protocol, 0);
-        assert_eq!(data.len(), 24);
-        assert_eq!(data[0], 0x11); // RX cmd
-        assert_eq!(data[12], 8); // dlc
-    }
-
-    #[test]
-    fn rawdata_format() {
-        let protocol = ProtocolConfig::RawData;
-        let data = generate_bytes(4, TestSignal::Dc, 0.0, &protocol, 42);
-        // 4 channel bytes + 4 byte counter
-        assert_eq!(data.len(), 8);
-        assert_eq!(&data[4..8], &42u32.to_le_bytes());
-    }
-
-    #[test]
-    fn logic_decode_format() {
-        let protocol = ProtocolConfig::LogicDecode {
-            decoder: LogicDecoderConfig::Uart {
-                baud_rate: 115200,
-                data_bits: 8,
-                parity: Parity::None,
-                stop_bits: StopBits::One,
-                channel: 0,
-            },
-        };
-        let data = generate_bytes(8, TestSignal::Square, 0.0, &protocol, 0);
-        // 8 samples per tick
-        assert_eq!(data.len(), 8);
-        // 通道 0 应有方波翻转
-        assert_ne!(data[0] & 0x01, 0);
-    }
-
-    #[test]
-    fn high_rate_phase_keeps_f64_resolution_after_long_runtime() {
-        let sample_rate = 700_000.0_f64;
-        let first = generate_frame(1, TestSignal::Sine, 3_600.0)[0];
-        let second = generate_frame(1, TestSignal::Sine, 3_600.0 + 1.0 / sample_rate)[0];
-
-        assert!(
-            (second - first).abs() > f32::EPSILON,
-            "长时间运行后 700 kHz 相邻样本仍必须推进相位"
-        );
-    }
-}
+#[path = "test_data_tests.rs"]
+mod tests;

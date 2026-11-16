@@ -15,8 +15,8 @@ use parking_lot::Mutex;
 use serde_json::Value;
 
 use crate::events::{AiChatEvent, EventSink};
-use crate::runner::{run_chat, ChatPayload, ChatTaskRegistry, ToolExecutor, TurnProvider};
-use data_model::Result;
+use crate::runner::{ChatPayload, ChatTaskRegistry, ToolExecutor, TurnProvider, run_chat};
+use error::Result;
 
 /// 脚本化回合: 每轮弹出预置产物;额外记录每轮收到的历史快照。
 struct MockTurn {
@@ -105,7 +105,7 @@ impl ToolExecutor for FixedExecutor {
     }
 }
 
-fn payload(max_rounds: u32) -> ChatPayload {
+fn payload() -> ChatPayload {
     ChatPayload {
         config: AiProviderConfig {
             adapter: "openai".to_string(),
@@ -123,7 +123,6 @@ fn payload(max_rounds: u32) -> ChatPayload {
             tool_call_id: None,
             name: None,
         }],
-        max_tool_rounds: max_rounds,
     }
 }
 
@@ -144,7 +143,7 @@ async fn text_only_completes_in_one_round() {
     let (_id, cancel_rx) = registry.register();
 
     let rounds = run_chat(
-        payload(4),
+        payload(),
         &provider,
         &FixedExecutor,
         cancel_rx,
@@ -155,12 +154,16 @@ async fn text_only_completes_in_one_round() {
     assert_eq!(rounds, 1);
 
     let events = events.lock();
-    assert!(events
-        .iter()
-        .any(|e| matches!(e, AiChatEvent::Done { rounds: 1 })));
-    assert!(events
-        .iter()
-        .any(|e| matches!(e, AiChatEvent::Delta { text } if text == "hello")));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, AiChatEvent::Done { rounds: 1 }))
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, AiChatEvent::Delta { text } if text == "hello"))
+    );
 }
 
 /// 工具轮 → 回填 → 下一轮出最终回答;历史含 assistant 工具调用与 tool 结果。
@@ -177,7 +180,7 @@ async fn tool_round_appends_result_then_final() {
     let (_id, cancel_rx) = registry.register();
 
     let rounds = run_chat(
-        payload(4),
+        payload(),
         &*provider,
         &FixedExecutor,
         cancel_rx,
@@ -207,10 +210,9 @@ async fn tool_round_appends_result_then_final() {
     ));
 }
 
-/// 工具循环每轮都发起调用 → 超出 max_tool_rounds 报错并回调 Error。
+/// 多轮工具调用继续执行，直到模型给出最终答复。
 #[tokio::test]
-async fn exceeds_max_rounds_errors() {
-    // 两轮各自发起一次调用, 脚本耗尽不回退文本
+async fn tool_calls_continue_until_final_answer() {
     let always_tools = MockTurn {
         turns: Mutex::new(vec![
             MockOutput::ToolCalls(vec![tool_call("c1", "probe", 1)]),
@@ -223,18 +225,25 @@ async fn exceeds_max_rounds_errors() {
     let (_id, cancel_rx) = registry.register();
 
     let result = run_chat(
-        payload(2),
+        payload(),
         &always_tools,
         &FixedExecutor,
         cancel_rx,
         sink_into(&events),
     )
     .await;
-    assert!(result.is_err(), "超轮次应返回错误");
+    assert_eq!(result.unwrap(), 3);
     let events = events.lock();
-    assert!(events
-        .iter()
-        .any(|e| matches!(e, AiChatEvent::Error { .. })));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, AiChatEvent::Done { rounds: 3 }))
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, AiChatEvent::Error { .. }))
+    );
 }
 
 /// 取消标志置位 → Cancelled 错误 + Cancelled 事件。
@@ -250,7 +259,7 @@ async fn cancel_flag_aborts_turn() {
     assert!(registry.cancel(&id), "取消已登记任务应成功");
 
     let result = run_chat(
-        payload(4),
+        payload(),
         &provider,
         &FixedExecutor,
         cancel_rx,
@@ -259,7 +268,7 @@ async fn cancel_flag_aborts_turn() {
     .await;
     assert!(matches!(
         result,
-        Err(data_model::Error::Ai(error::AiError::Cancelled))
+        Err(error::AppError::Ai(error::AiError::Cancelled))
     ));
     let events = events.lock();
     assert!(events.iter().any(|e| matches!(e, AiChatEvent::Cancelled)));

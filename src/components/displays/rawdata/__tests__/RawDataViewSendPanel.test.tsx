@@ -1,11 +1,12 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
+import { renderWithI18n } from '../../../../test/renderWithI18n';;
 import { describe, expect, it, vi } from 'vitest';
 import { RawDataViewSendPanel } from '../RawDataViewSendPanel';
 
 describe('RawDataViewSendPanel', () => {
   it('shows and updates the selected append option', () => {
     const onAppendModeChange = vi.fn();
-    const { rerender } = render(
+    const { rerender } = renderWithI18n(
       <RawDataViewSendPanel
         appendMode="nl"
         sendContent=""
@@ -39,5 +40,26 @@ describe('RawDataViewSendPanel', () => {
     );
     expect(none).toHaveAttribute('aria-pressed', 'true');
     expect(newline).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('uses responsive text on the shared send button and keeps the bottom bar scrollable', () => {
+    const { container } = renderWithI18n(
+      <RawDataViewSendPanel
+        appendMode="none"
+        sendContent=""
+        onAppendModeChange={vi.fn()}
+        onSendContentChange={vi.fn()}
+        onSend={vi.fn()}
+        lang="zh"
+        targetTransportLabel="Serial"
+      />
+    );
+
+    const send = screen.getByRole('button', { name: '发送' });
+    expect(within(send).getByText('发送')).toHaveClass('responsive-toolbar-label-compact');
+    const toolbar = container.querySelector('.responsive-toolbar');
+    expect(toolbar).toHaveClass('overflow-x-auto');
+    expect(toolbar).toHaveClass('flex-nowrap');
+    expect(container.querySelector('.horizontal-scroll-shadow-end')).not.toBeNull();
   });
 });

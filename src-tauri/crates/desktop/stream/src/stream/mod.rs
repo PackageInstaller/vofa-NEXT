@@ -11,19 +11,19 @@
 //!   `bounded_drain_size(backlog, min_batch, MAX_DRAIN)` 批量。
 //! - **顺序**: 增量流前端按 seq 严格重组; 快照流 (波形) 按 "最新 seq 胜出"。
 
-use crate::dispatcher::{adaptive_channel_loop, AdaptiveRate};
-use can::{CanBuffer, CanFrameBatch};
-use data_model::{Error, Result};
-use error::ConfigError;
+use crate::dispatcher::{AdaptiveRate, adaptive_stream_loop};
+use crate::sink::{StreamPayload, StreamSink};
+use can::{CanBuffer, CanCursor, CanFrameBatch};
+
+use error::{AppError as Error, ConfigError, Result};
 use logic::{DecodedBuffer, DecodedEventBatch, LogicBuffer, LogicSampleBatch};
 use parking_lot::Mutex;
 use pipeline::StreamGroupState;
 use raw_data::{RawDataBatch, RawDataCollector, RawDrain};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use tauri::ipc::Channel;
 use tokio::sync::oneshot;
 
 mod waveform;
@@ -64,29 +64,26 @@ pub trait StreamSource: Send + 'static {
 
 /// 统一分片推送循环 — 所有数据流共用
 ///
-/// 由 subscribe_* 命令按分片 spawn; 取消信号或 Channel 关闭时退出。
-#[allow(clippy::too_many_arguments)]
+/// 由订阅方按分片 spawn; 取消信号或对端关闭时退出。
 pub async fn sharded_stream_loop<S: StreamSource>(
     name: String,
     source: Arc<Mutex<S>>,
-    on_event: Channel<S::Batch>,
+    sink: Arc<dyn StreamSink>,
     shard_idx: usize,
     seq: Arc<AtomicU64>,
     interval: Duration,
     min_batch: usize,
     cancel_rx: oneshot::Receiver<()>,
 ) {
-    let channel_id = on_event.id();
     let rate = AdaptiveRate::new(
         Duration::from_millis(16),
         interval.max(Duration::from_millis(100)),
     );
     let log_name = name.clone();
     let mut was_active = shard_idx == 0;
-    adaptive_channel_loop(
+    adaptive_stream_loop(
         &name,
-        channel_id,
-        on_event,
+        sink,
         rate,
         move || {
             let mut src = source.lock();
@@ -111,7 +108,7 @@ pub async fn sharded_stream_loop<S: StreamSource>(
             let mut batch = src.drain(bounded_drain_size(backlog, min_batch, S::MAX_DRAIN))?;
             // seq 在源锁内分配, 保证全局单调且与 drain 顺序一致
             S::set_seq(&mut batch, seq.fetch_add(1, Ordering::Relaxed));
-            Some(batch)
+            serde_json::to_string(&batch).ok().map(StreamPayload::Json)
         },
         cancel_rx,
     )
@@ -120,12 +117,12 @@ pub async fn sharded_stream_loop<S: StreamSource>(
 
 /// 带载荷映射的统一分片推送循环。
 ///
-/// 数据源保持自己的强类型批次，IPC 边界可将其无拷贝地包装进统一事件枚举。
+/// 数据源保持自己的强类型批次，出口边界可将其包装进统一事件枚举。
 #[allow(clippy::too_many_arguments)]
 pub async fn sharded_stream_loop_map<S, E, F>(
     name: String,
     source: Arc<Mutex<S>>,
-    on_event: Channel<E>,
+    sink: Arc<dyn StreamSink>,
     shard_idx: usize,
     seq: Arc<AtomicU64>,
     interval: Duration,
@@ -137,17 +134,15 @@ pub async fn sharded_stream_loop_map<S, E, F>(
     E: serde::Serialize + Send + 'static,
     F: Fn(S::Batch) -> E + Send + 'static,
 {
-    let channel_id = on_event.id();
     let rate = AdaptiveRate::new(
         Duration::from_millis(16),
         interval.max(Duration::from_millis(100)),
     );
     let log_name = name.clone();
     let mut was_active = shard_idx == 0;
-    adaptive_channel_loop(
+    adaptive_stream_loop(
         &name,
-        channel_id,
-        on_event,
+        sink,
         rate,
         move || {
             let mut src = source.lock();
@@ -169,7 +164,9 @@ pub async fn sharded_stream_loop_map<S, E, F>(
             }
             let mut batch = src.drain(bounded_drain_size(backlog, min_batch, S::MAX_DRAIN))?;
             S::set_seq(&mut batch, seq.fetch_add(1, Ordering::Relaxed));
-            Some(map(batch))
+            serde_json::to_string(&map(batch))
+                .ok()
+                .map(StreamPayload::Json)
         },
         cancel_rx,
     )
@@ -300,14 +297,14 @@ impl StreamSource for RawDataSource {
 /// CAN 帧流 — 组内游标增量读取 (游标起点回溯 max_items, 订阅即可见近期历史)
 pub struct CanStreamSource {
     buffer: Arc<Mutex<CanBuffer>>,
-    cursor: u64,
+    cursor: CanCursor,
 }
 
 impl CanStreamSource {
     pub fn new(buffer: Arc<Mutex<CanBuffer>>, max_items: usize) -> Self {
         let cursor = {
             let buf = buffer.lock();
-            buf.version().saturating_sub(max_items as u64)
+            CanCursor::new(buf.version().saturating_sub(max_items as u64))
         };
         Self { buffer, cursor }
     }
@@ -318,19 +315,18 @@ impl StreamSource for CanStreamSource {
 
     fn backlog(&mut self) -> usize {
         let buf = self.buffer.lock();
-        usize::try_from(buf.version().saturating_sub(self.cursor)).unwrap_or(usize::MAX)
+        usize::try_from(buf.version().saturating_sub(self.cursor.value())).unwrap_or(usize::MAX)
     }
 
     fn drain(&mut self, max: usize) -> Option<Self::Batch> {
-        let buf = self.buffer.lock();
-        let (items, new_cursor, _dropped) = buf.drain_from(self.cursor, max);
-        self.cursor = new_cursor;
-        if items.is_empty() {
+        let result = self.buffer.lock().read_from(self.cursor, max);
+        self.cursor = result.next_cursor;
+        if result.frames.is_empty() {
             None
         } else {
             Some(CanFrameBatch {
                 seq: 0,
-                frames: items,
+                frames: result.frames,
             })
         }
     }

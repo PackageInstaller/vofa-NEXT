@@ -1,5 +1,24 @@
 import { describe, expect, test } from 'vitest';
-import { NodeErrorKind, parseNodeError } from '../errors';
+import { NodeErrorKind, errorText, parseNodeError } from '../errors';
+
+describe('errorText', () => {
+  test('RpcError 形状 { kind, message } 取 message — 不是 [object Object]', () => {
+    expect(errorText({ kind: 'Recording', message: '录制数据库已关闭' })).toBe('录制数据库已关闭');
+  });
+
+  test('Error / 字符串原样返回', () => {
+    expect(errorText(new Error('boom'))).toBe('boom');
+    expect(errorText('端口已打开: COM3')).toBe('端口已打开: COM3');
+  });
+
+  test('无 message 的对象退化为 JSON; 不可序列化的值仍返回字符串', () => {
+    expect(errorText({ foo: 1 })).toBe('{"foo":1}');
+    expect(typeof errorText(undefined)).toBe('string');
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    expect(typeof errorText(circular)).toBe('string');
+  });
+});
 
 describe('parseNodeError', () => {
   test('解析后端带标签枚举错误 { kind, message }', () => {
@@ -47,5 +66,27 @@ describe('parseNodeError', () => {
   test('Plugin 错误解析为 Plugin kind', () => {
     const err = parseNodeError({ kind: 'Plugin', message: '插件错误 [updater]: net' });
     expect(err.kind).toBe(NodeErrorKind.Plugin);
+  });
+
+  test('纯字符串 serde unknown variant 还原为 Config kind', () => {
+    const err = parseNodeError(
+      'invalid driver configuration: unknown variant `Bps1M`, expected one of `Bps10k`, `Bps1m`',
+    );
+    expect(err.kind).toBe(NodeErrorKind.Config);
+    expect(err.message).toContain('unknown variant');
+  });
+
+  test('缺字段 / 类型错误等 serde 消息同样还原为 Config kind', () => {
+    expect(parseNodeError('invalid driver configuration: missing field `port_name`').kind).toBe(
+      NodeErrorKind.Config,
+    );
+    expect(
+      parseNodeError({ kind: 'NewKind', message: 'invalid type: integer `3`, expected a string' })
+        .kind,
+    ).toBe(NodeErrorKind.Config);
+  });
+
+  test('普通传输类消息不受启发式影响, 保持 Unknown', () => {
+    expect(parseNodeError('端口已打开: COM3').kind).toBe(NodeErrorKind.Unknown);
   });
 });

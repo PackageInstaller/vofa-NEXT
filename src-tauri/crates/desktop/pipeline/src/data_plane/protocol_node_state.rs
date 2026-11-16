@@ -2,7 +2,7 @@
 
 use parking_lot::Mutex;
 use protocol::ProtocolEngine;
-use schema_types::{ProtocolConfig, ProtocolSchema};
+use schema_types::{ProtocolConfig, ProtocolSchema, SchemaPreset};
 use std::sync::Arc;
 
 use crate::feed_parallel::ParallelFeeder;
@@ -36,8 +36,8 @@ pub struct ProtocolNodeState {
     pub config: ProtocolConfig,
     /// convert_to 目标配置
     pub convert_config: Option<ProtocolConfig>,
-    /// 帧 schema (协议引擎统一为 schema 模型; None = 旧前端, 引擎按 config 构造)
-    pub schema: Option<ProtocolSchema>,
+    /// 帧 schema (协议引擎统一由 schema 编译)
+    pub schema: ProtocolSchema,
     /// 并行解析编排器 (feed 内含 spawn_blocking await, 用 tokio mutex 跨 await 持有)
     pub parallel: Arc<tokio::sync::Mutex<ParallelFeeder>>,
     /// 当前是否处于并行解析模式 (顺序↔并行切换时做 pending 交接)
@@ -89,17 +89,21 @@ impl ProtocolNodeState {
     pub fn new(
         config: &ProtocolConfig,
         convert_to: Option<&ProtocolConfig>,
-        schema: Option<&ProtocolSchema>,
+        schema: &ProtocolSchema,
     ) -> Self {
-        // 有 schema 时由 compile_schema 构造引擎 (预设走 legacy 引擎, Custom 走 SchemaEngine);
-        // 无 schema (旧前端) 保持原有 create_engine 路径
-        let engine = schema.map_or_else(|| create_protocol_engine(config), schema::compile_schema);
+        // 预设引擎的参数以节点 protocol 配置为准；自定义块才由 schema 编译。
+        // preset_config 是 schema 的可选字段，缺失时不能落入空块解析器。
+        let engine = if schema.preset == SchemaPreset::Custom {
+            schema::compile_schema(schema)
+        } else {
+            create_protocol_engine(config)
+        };
         Self {
             engine: Arc::new(Mutex::new(engine)),
             convert_engine: convert_to.map(|c| Arc::new(Mutex::new(create_protocol_engine(c)))),
             config: config.clone(),
             convert_config: convert_to.cloned(),
-            schema: schema.cloned(),
+            schema: schema.clone(),
             parallel: Arc::new(tokio::sync::Mutex::new(ParallelFeeder::new())),
             in_parallel: false,
             parallel_supported: None,
@@ -166,12 +170,11 @@ impl ProtocolNodeState {
                 }),
                 Some((SampleClockBasis::SerialNominal, _, batch_bytes)),
             ) = (&mut self.sample_clock, hint)
+                && !*anchored
+                && batch_bytes > 0
             {
-                if !*anchored && batch_bytes > 0 {
-                    *next_us += f64::from(u32::try_from(batch_bytes).unwrap_or(u32::MAX))
-                        * 1_000_000.0
-                        / *rate;
-                }
+                *next_us +=
+                    f64::from(u32::try_from(batch_bytes).unwrap_or(u32::MAX)) * 1_000_000.0 / *rate;
             }
             return;
         }
@@ -265,7 +268,7 @@ impl ProtocolNodeState {
         &self,
         config: &ProtocolConfig,
         convert_to: Option<&ProtocolConfig>,
-        schema: Option<&ProtocolSchema>,
+        schema: &ProtocolSchema,
     ) -> bool {
         serde_json::to_value(&self.config).ok() == serde_json::to_value(config).ok()
             && serde_json::to_value(&self.convert_config).ok()
@@ -275,56 +278,5 @@ impl ProtocolNodeState {
 }
 
 #[cfg(test)]
-mod sample_clock_tests {
-    use super::{ProtocolNodeState, SampleClockBasis};
-    use data_model::DataFrame;
-    use schema_types::ProtocolConfig;
-
-    fn frames(count: usize) -> Vec<DataFrame> {
-        (0..count)
-            .map(|_| DataFrame::with_timestamp(0, vec![1.0]))
-            .collect()
-    }
-
-    #[test]
-    fn exact_clock_preserves_an_explicit_lagged_gap() {
-        let mut state =
-            ProtocolNodeState::new(&ProtocolConfig::JustFloat { channels: Some(1) }, None, None);
-        let hint = Some((SampleClockBasis::ExactRate, 1_000.0, 0));
-        let mut first = frames(2);
-        state.restamp_frames(hint, 10_000, &mut first);
-        assert_eq!(
-            first
-                .iter()
-                .map(|frame| frame.timestamp)
-                .collect::<Vec<_>>(),
-            vec![9_000, 10_000]
-        );
-
-        // 三帧在解析前丢失；下一帧与上一帧应相隔四个采样周期。
-        state.note_exact_frame_gap(3, 1_000.0);
-        let mut second = frames(2);
-        state.restamp_frames(hint, 99_000, &mut second);
-        assert_eq!(
-            second
-                .iter()
-                .map(|frame| frame.timestamp)
-                .collect::<Vec<_>>(),
-            vec![14_000, 15_000]
-        );
-    }
-
-    #[test]
-    fn gap_before_first_visible_batch_is_absorbed_by_arrival_anchor() {
-        let mut state =
-            ProtocolNodeState::new(&ProtocolConfig::JustFloat { channels: Some(1) }, None, None);
-        state.note_exact_frame_gap(500, 1_000.0);
-        let mut first = frames(2);
-        state.restamp_frames(
-            Some((SampleClockBasis::ExactRate, 1_000.0, 0)),
-            10_000,
-            &mut first,
-        );
-        assert_eq!(first[1].timestamp, 10_000);
-    }
-}
+#[path = "protocol_node_state_sample_clock_tests.rs"]
+mod sample_clock_tests;

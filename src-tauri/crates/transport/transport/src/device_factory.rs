@@ -1,17 +1,19 @@
 //! Byte adapters participate in the same capability directory and sessions as Modbus.
 use acquisition::handle::TransportHandle;
 use acquisition::{
-    AcquisitionError, AcquisitionResult, AdapterCapability, CapabilitySet, ConfigurationSchema,
-    DriverManifest, DriverSchema, EndpointDescriptor, EndpointDirection, PortDescriptor,
-    PortDirection, ProtocolKind, RuntimeState, RuntimeStatus, SessionCapabilities, SourceFactory,
-    SourceSession, TransportBackend, TransportKind, ValidatedConfig, CAPABILITY_CONTRACT_VERSION,
+    AcquisitionError, AcquisitionResult, AdapterCapability, CAPABILITY_CONTRACT_VERSION,
+    CapabilitySet, DriverManifest, DriverSchema, EndpointDescriptor, EndpointDirection,
+    PortDescriptor, PortDirection, ProtocolKind, RuntimeState, RuntimeStatus, SessionCapabilities,
+    SourceFactory, SourceSession, TransportBackend, TransportKind, ValidatedConfig,
 };
 use async_trait::async_trait;
-use data_model::device::{DriverId, DriverPayload};
+use data_model::CanBitrate;
+use data_model::ConfigurationSchema;
 use data_model::TransportConfig;
+use data_model::device::{DriverId, DriverPayload};
 use flow::PayloadKind;
 use schema_types::{ProtocolConfig, TestDataLink};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -22,6 +24,11 @@ pub struct ByteDeviceFactory {
 }
 
 impl ByteDeviceFactory {
+    /// 驱动的默认传输配置 (装配时以 TransportConfig::default 传入)。
+    pub const fn defaults(&self) -> &TransportConfig {
+        &self.defaults
+    }
+
     pub fn new(
         id: &str,
         name: &str,
@@ -93,21 +100,10 @@ impl SourceFactory for ByteDeviceFactory {
         let params = defaults["params"]
             .as_object()
             .expect("transport parameters are objects");
-        let properties: serde_json::Map<String, Value> = params.iter().map(|(key, value)| {
-            let mut field = json!({ "type": if value.is_number() { "integer" } else { "string" }, "default": value });
-            match key.as_str() {
-                "port" | "remote_port" | "listen_port" => { field["minimum"] = json!(1); field["maximum"] = json!(65535); }
-                "local_port" => { field["minimum"] = json!(0); field["maximum"] = json!(65535); }
-                "baud_rate" => { field["minimum"] = json!(1); }
-                "data_bits" => { field["enum"] = json!([5, 6, 7, 8]); }
-                "parity" => { field["enum"] = json!(["none", "odd", "even"]); }
-                "stop_bits" => { field["enum"] = json!(["one", "two"]); }
-                "flow_control" => { field["enum"] = json!(["none", "software", "hardware"]); }
-                "can_bitrate" => { field["enum"] = json!(["Bps10k", "Bps20k", "Bps50k", "Bps100k", "Bps125k", "Bps250k", "Bps500k", "Bps800k", "Bps1M"]); }
-                _ => {}
-            }
-            (key.clone(), field)
-        }).collect();
+        let properties: serde_json::Map<String, Value> = params
+            .iter()
+            .map(|(key, value)| (key.clone(), field_schema(key, value)))
+            .collect();
         DriverSchema {
             schema_version: 1,
             json_schema: json!({ "type": "object", "properties": properties,
@@ -215,6 +211,49 @@ struct ByteSession {
     capabilities: SessionCapabilities,
 }
 
+/// 单个传输参数的 schema 字段 — 默认值取自出厂配置, 枚举约束按字段名注入。
+fn field_schema(key: &str, default: &Value) -> Value {
+    let mut field = json!({ "type": if default.is_number() { "integer" } else { "string" }, "default": default });
+    match key {
+        "port" | "remote_port" | "listen_port" => {
+            field["minimum"] = json!(1);
+            field["maximum"] = json!(65535);
+        }
+        "local_port" => {
+            field["minimum"] = json!(0);
+            field["maximum"] = json!(65535);
+        }
+        "baud_rate" => {
+            field["minimum"] = json!(1);
+        }
+        "data_bits" => {
+            field["enum"] = json!([5, 6, 7, 8]);
+        }
+        "parity" => {
+            field["enum"] = json!(["none", "odd", "even"]);
+        }
+        "stop_bits" => {
+            field["enum"] = json!(["one", "two"]);
+        }
+        "flow_control" => {
+            field["enum"] = json!(["none", "software", "hardware"]);
+        }
+        "can_bitrate" => {
+            field["enum"] = json!(can_bitrate_candidates());
+        }
+        _ => {}
+    }
+    field
+}
+
+/// can_bitrate 候选值 — 直接序列化 [`CanBitrate::ALL`], 与 Rust 枚举零漂移。
+fn can_bitrate_candidates() -> Vec<Value> {
+    CanBitrate::ALL
+        .iter()
+        .map(|bitrate| serde_json::to_value(bitrate).expect("CanBitrate is serializable"))
+        .collect()
+}
+
 #[async_trait]
 impl SourceSession for ByteSession {
     fn epoch(&self) -> u64 {
@@ -227,10 +266,15 @@ impl SourceSession for ByteSession {
         Some(&self.handle)
     }
     async fn stopped(&self) -> AcquisitionResult<()> {
-        self.close().await
+        self.handle.wait_closed().await;
+        Ok(())
     }
     async fn close(&self) -> AcquisitionResult<()> {
         self.handle.close();
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "device_factory_tests.rs"]
+mod tests;

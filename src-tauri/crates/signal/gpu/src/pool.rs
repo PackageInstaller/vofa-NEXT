@@ -134,8 +134,8 @@ impl ReadbackStaging {
             .map_err(|e| GpuError::Map(format!("get_mapped_range: {e}")))
             .expect("read_f32 要求 staging 处于已映射状态");
         let need = out.len() * 4;
-        for (i, chunk) in bytes[..need].chunks_exact(4).enumerate() {
-            out[i] = f32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        for (i, chunk) in bytes[..need].as_chunks::<4>().0.iter().enumerate() {
+            out[i] = f32::from_ne_bytes(*chunk);
         }
     }
 
@@ -151,8 +151,8 @@ impl ReadbackStaging {
             .get_mapped_range()
             .expect("read_u32 要求 staging 处于已映射状态");
         let need = out.len() * 4;
-        for (i, chunk) in bytes[..need].chunks_exact(4).enumerate() {
-            out[i] = u32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        for (i, chunk) in bytes[..need].as_chunks::<4>().0.iter().enumerate() {
+            out[i] = u32::from_ne_bytes(*chunk);
         }
     }
 
@@ -166,16 +166,5 @@ impl ReadbackStaging {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// 无 GPU 时构造路径不 panic (仅覆盖纯逻辑分支; 缓冲创建需设备)
-    #[test]
-    fn error_type_formatting() {
-        let e = GpuError::BufferOverflow {
-            required: 1024,
-            limit: 512,
-        };
-        assert!(e.to_string().contains("1024"));
-    }
-}
+#[path = "pool_tests.rs"]
+mod tests;

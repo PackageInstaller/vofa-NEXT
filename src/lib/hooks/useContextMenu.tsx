@@ -4,18 +4,23 @@ import { useContextMenuStore } from '../../store/contextMenuStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useAppStore } from '../../store/appStore';
 import { api } from '../tauri/tauri';
-import { t } from '../../i18n';
+import { translate } from '../../i18n';
 import type { Lang } from '../../i18n';
 import type { ContextMenuEntry, ContextMenuItem } from '../../types';
 
 /// 保留原生右键的元素标签，避免破坏输入体验
+/// 右键保留浏览器原生菜单的元素。
+///
+/// 与键盘侧 `isTextEntryTarget` **故意不同**: `select` 不在其中。左键展开下拉是
+/// select 的主交互, 而它没有值得保留的原生右键菜单 —— 应用内菜单更有用;
+/// 键盘侧则相反, select 会自己消费 Ctrl+A/方向键, 必须让路。
 const NATIVE_RIGHT_CLICK_TAGS = new Set(['INPUT', 'TEXTAREA']);
 
 /// 构建检查元素菜单项
 function buildInspectItem(lang: Lang): ContextMenuItem {
   return {
     id: 'inspect-element',
-    label: t(lang, 'contextMenuInspectElement'),
+    label: translate('contextMenuInspectElement', lang),
     icon: <Bug size={14} />,
     onClick: () => {
       api.inspectElement().catch((e: unknown) => {
@@ -49,19 +54,21 @@ export function useContextMenu(items: ContextMenuEntry[] | (() => ContextMenuEnt
         return;
       }
 
+      const resolved = typeof items === 'function' ? items() : items;
+      const finalItems = withInspectElementIfDebug(resolved, lang);
+
+      // 没有菜单项时**不吃掉右键**: 既不 preventDefault 也不 stopPropagation,
+      // 让事件照常冒泡 (父层菜单或原生菜单)。否则该区域右键「什么都不弹」——
+      // 数据卡片标签栏就是这种空菜单表面。
+      if (finalItems.length === 0) return;
+
       e.preventDefault();
       e.stopPropagation();
 
-      const resolved = typeof items === 'function' ? items() : items;
-
       if (debug) {
         // 输出调试数据到控制台
-        console.info('[context-menu]', resolved);
+        console.info('[context-menu]', finalItems);
       }
-
-      const finalItems = withInspectElementIfDebug(resolved, lang);
-
-      if (finalItems.length === 0) return;
 
       open(e.clientX, e.clientY, finalItems);
     },

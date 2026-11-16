@@ -8,8 +8,9 @@
 
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use gpu::{envelope_minmax, envelope_minmax_cpu, GpuContext};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use gpu::{GpuContext, envelope_minmax};
+use waveform::envelope_minmax_cpu;
 
 /// 确定性伪随机波形 (正弦 + LCG 噪声, 含少量 NaN)
 fn waveform(n: usize) -> Vec<f32> {
@@ -21,7 +22,10 @@ fn waveform(n: usize) -> Vec<f32> {
             if i % 997 == 0 {
                 f32::NAN
             } else {
-                ((i % 10_000) as f32 * 0.001 * std::f32::consts::TAU).sin() + noise * 0.1
+                noise.mul_add(
+                    0.1,
+                    ((i % 10_000) as f32 * 0.001 * std::f32::consts::TAU).sin(),
+                )
             }
         })
         .collect()

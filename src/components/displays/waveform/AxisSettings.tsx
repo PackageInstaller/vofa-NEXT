@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAppStore } from '../../../store/appStore';
-import { t } from '../../../i18n';
+import { translate } from '../../../i18n';
 import {
   type ScopeAxisConfig,
   type ChannelAxisConfig,
@@ -76,17 +76,17 @@ export function AxisSettings({
         <SlidingPill pill={tabPill} variant="panel" />
         <button
           data-tab-key="all"
-          className={`relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 rounded-md bg-transparent border-none text-[10px] font-mono cursor-pointer transition-colors duration-150 ${activeTab === 'all' ? 'text-text-bright' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
+          className={`relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 rounded-md bg-transparent border-none text-[10px] font-mono cursor-pointer transition-colors ${activeTab === 'all' ? 'text-text-bright' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
           onClick={() => setActiveTab('all')}
-          title={t(lang, 'channels')}
+          title={translate('channels', lang)}
         >
-          {t(lang, 'channels')}
+          {translate('channels', lang)}
         </button>
         {channels.map((ch, idx) => (
           <button
             key={idx}
             data-tab-key={`ch${idx}`}
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 rounded-md bg-transparent border-none text-[10px] font-mono cursor-pointer transition-colors duration-150 ${activeTab === `ch${idx}` ? 'text-text-bright' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'} ${!ch.show ? 'opacity-50' : ''}`}
+            className={`relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 rounded-md bg-transparent border-none text-[10px] font-mono cursor-pointer transition-colors ${activeTab === `ch${idx}` ? 'text-text-bright' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'} ${!ch.show ? 'opacity-disabled' : ''}`}
             onClick={() => setActiveTab(`ch${idx}` as TabId)}
             title={`CH${idx}`}
           >

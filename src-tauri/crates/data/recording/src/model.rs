@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::RecordingError;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Domain {
@@ -179,7 +181,10 @@ pub struct RecordingLimits {
 impl Default for RecordingLimits {
     fn default() -> Self {
         Self {
-            queue_batches: 256,
+            // 缓冲必须扛得住一次 checkpoint / 杀毒扫描停顿。256 条只够不到一秒
+            // 的突发, Windows 上必然打满, 而打满曾被误判成写入故障 (见
+            // `hub::fault`) — 一次瞬态背压就会把采集永久停住。
+            queue_batches: 4_096,
             transaction_bytes: 8 * 1024 * 1024,
             commit_interval_ms: 250,
         }
@@ -195,6 +200,18 @@ pub struct RecordingHealth {
     pub accepted_sequence: u64,
     pub persisted_sequence: u64,
     pub queued_batches: u64,
+    /// 数据库写入总开关 (设置项)。`false` 是用户主动关闭, 不是故障。
+    pub enabled: bool,
+    /// 写线程队列打满而丢弃的批次数 — 正常背压, 采集与运行控制不受影响。
+    /// 大于零表示磁盘/checkpoint 一时跟不上, 该区间的录制数据不完整。
+    pub dropped_batches: u64,
+    /// 绑定缺失或域不匹配而被拒的批次数 — 图编辑与在途批次的竞态, 同样不影响采集。
+    pub rejected_batches: u64,
+    /// 可见但**非故障**的提示 (例如打开时自动重建过数据库)。
+    ///
+    /// 与 `failed` 严格分开: `failed` 会被 [`crate::RecordingHub::fault`] 当成
+    /// 录制契约破坏而停掉采集, 提示不行。
+    pub warning: Option<String>,
     pub failed: Option<String>,
 }
 
@@ -213,4 +230,125 @@ pub struct StoredBatch {
     pub effective_bytes: u64,
     pub checksum: u64,
     pub payload: Option<BatchPayload>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BindingInfo {
+    pub id: String,
+    pub session_id: String,
+    pub component_id: String,
+    pub source_node_id: String,
+    pub source_handle: String,
+    pub domain: Domain,
+    pub capability: BindingCapability,
+    pub bound_at_us: u64,
+    pub unbound_at_us: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionSummary {
+    pub session: SessionInfo,
+    pub binding_count: u64,
+    pub batch_count: u64,
+    pub item_count: u64,
+    pub effective_bytes: u64,
+    pub first_timestamp_us: Option<u64>,
+    pub last_timestamp_us: Option<u64>,
+    /// Whether the hub is currently writing into this session.
+    #[serde(default)]
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordingDatabaseInfo {
+    pub path: String,
+    pub file_size_bytes: u64,
+    pub session_count: u64,
+    pub batch_count: u64,
+    pub item_count: u64,
+    pub effective_bytes: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordingExportFormat {
+    Csv,
+    Json,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordingExportRequest {
+    pub session_id: String,
+    pub binding_id: Option<String>,
+    pub from_us: Option<u64>,
+    pub to_us: Option<u64>,
+    pub format: RecordingExportFormat,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordingExportResult {
+    pub rows: u64,
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordingCleanupPolicy {
+    #[serde(default)]
+    pub session_ids: Vec<String>,
+    #[serde(default)]
+    pub delete_stopped: bool,
+    #[serde(default)]
+    pub delete_failed: bool,
+    #[serde(default)]
+    pub older_than_us: Option<u64>,
+    #[serde(default)]
+    pub keep_latest: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordingCleanupResult {
+    pub deleted_sessions: u64,
+    pub deleted_batches: u64,
+    pub deleted_items: u64,
+    pub deleted_bytes: u64,
+    /// Non-fatal problems: sessions that survived cleanup, or an automatic database repair.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryQuery {
+    pub session_id: String,
+    pub binding_id: Option<String>,
+    pub after_row_id: i64,
+    pub from_us: Option<u64>,
+    pub to_us: Option<u64>,
+    pub limit: usize,
+    pub include_payload: bool,
+}
+
+/// 写入前的批次校验 — 空批次与「时间戳数量 / 载荷列数」不一致都会破坏录制契约。
+///
+/// 由唯一连接上的写入路径 ([`crate::store::RecordingStore::write_batch`]) 调用,
+/// 所以放这里而不是散在 store 里: 校验的是模型自身的合法性。
+pub fn validate_batch(batch: &RecordBatch) -> Result<(), RecordingError> {
+    let count = batch.payload.item_count();
+    if count == 0 {
+        return Err(RecordingError::Invalid("empty recording batch".into()));
+    }
+    let valid_timestamps = match &batch.payload {
+        BatchPayload::Bytes { .. } | BatchPayload::Spectrum { .. } => {
+            batch.timestamps_us.len() == 1
+        }
+        BatchPayload::String { .. } | BatchPayload::Float { .. } => {
+            batch.timestamps_us.len() == count
+        }
+    };
+    if !valid_timestamps {
+        return Err(RecordingError::Invalid(
+            "timestamp and payload column lengths differ".into(),
+        ));
+    }
+    Ok(())
 }

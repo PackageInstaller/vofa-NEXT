@@ -9,7 +9,7 @@ import {
   type SeriesRender,
 } from '../../../types';
 import type { RenderStepSelect } from '../common/scopeShared';
-import { t, type Lang } from '../../../i18n';
+import { translate, type Lang } from '../../../i18n';
 
 /// "全部" Tab 中的紧凑通道行 — 每通道一行: show/耦合/Vdiv旋钮+下拉/Position
 export function CompactChannelRow({
@@ -32,7 +32,7 @@ export function CompactChannelRow({
     <div className="flex flex-col gap-0.5 py-1 border-t border-border/50 first:border-t-0">
       <div className="flex items-center justify-between gap-1">
         <button
-          className={`inline-flex items-center gap-1 border rounded px-1.5 h-6 text-[10px] font-mono cursor-pointer transition-all duration-150 ${ch.show ? 'text-text-bright border-blue bg-blue/10' : 'text-text-secondary border-border opacity-60'} hover:bg-bg-hover`}
+          className={`inline-flex items-center gap-1 border rounded px-1.5 h-6 text-[10px] font-mono cursor-pointer motion-transition ${ch.show ? 'text-text-bright border-blue bg-blue/10' : 'text-text-secondary border-border opacity-muted'} hover:bg-bg-hover`}
           onClick={() => onPatchChannel(idx, { show: !ch.show })}
           title={`CH${idx}`}
         >
@@ -46,9 +46,9 @@ export function CompactChannelRow({
             onPatchChannel(idx, { coupling: e.target.value as Coupling })
           }
         >
-          <option value="DC">{t(lang, 'couplingDC')}</option>
-          <option value="AC">{t(lang, 'couplingAC')}</option>
-          <option value="GND">{t(lang, 'couplingGND')}</option>
+          <option value="DC">{translate('couplingDC', lang)}</option>
+          <option value="AC">{translate('couplingAC', lang)}</option>
+          <option value="GND">{translate('couplingGND', lang)}</option>
         </select>
       </div>
       <div className="flex items-center gap-1.5 mt-0.5">

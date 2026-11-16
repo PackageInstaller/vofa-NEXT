@@ -6,12 +6,11 @@ import { useNumericInputs } from '../../../lib/hooks/useNumericPort';
 import { downstreamProtocolOf } from '../../../store/appStoreHelpers';
 import { bytesToHex } from '../../../lib/utils/commandParser';
 import {
-  normalizeCommandConfig,
   commandInputPortNames,
   makeEmptyFrame,
   type ComputedFrame,
 } from '../../../lib/utils/commandFrames';
-import { t, type Lang } from '../../../i18n';
+import { translate, type Lang } from '../../../i18n';
 import { activateOnKeyboard } from '../../../lib/utils/a11y';
 import { nanoid } from 'nanoid';
 import { Plus, X } from 'lucide-react';
@@ -66,8 +65,8 @@ function CommandFrameTabBar({
 
   return (
     <div className="flex items-center gap-1 px-2 py-1 border-b border-border shrink-0 overflow-x-auto">
-      <span className="text-[10px] text-text-secondary uppercase tracking-wide font-semibold pr-1 shrink-0">
-        {t(lang, 'cmdFrames')}
+      <span className="section-heading section-heading--micro pr-1 shrink-0">
+        {translate('cmdFrames', lang)}
       </span>
       {frames.map((f) => {
         const active = f.id === activeId;
@@ -87,7 +86,7 @@ function CommandFrameTabBar({
               setEditingId(f.id);
               setEditingLabel(f.label);
             }}
-            title={t(lang, 'cmdRenameFrameHint')}
+            title={translate('cmdRenameFrameHint', lang)}
           >
             {editingId === f.id ? (
               <input
@@ -107,8 +106,8 @@ function CommandFrameTabBar({
             )}
             {frames.length > 1 && (
               <button
-                className="p-0.5 opacity-60 hover:opacity-100 hover:text-red shrink-0"
-                title={t(lang, 'cmdRemoveFrame')}
+                className="p-0.5 opacity-muted hover:opacity-100 hover:text-red shrink-0"
+                title={translate('cmdRemoveFrame', lang)}
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemove(f.id);
@@ -122,7 +121,7 @@ function CommandFrameTabBar({
       })}
       <button
         className="inline-flex items-center justify-center p-1 rounded-sm border border-dashed border-border text-text-secondary hover:text-text-primary hover:border-accent transition-colors shrink-0"
-        title={t(lang, 'cmdAddFrame')}
+        title={translate('cmdAddFrame', lang)}
         onClick={onAdd}
       >
         <Plus size={11} />
@@ -147,9 +146,12 @@ export function CommandSender({ widget }: CommandSenderProps) {
   const runState = useAppStore((s) => s.runState);
   const canSend = runState === 'running';
 
-  // 归一化后的配置 (旧版单帧配置现场包装, updateWidget 落盘时已归一化)
-  const config = useMemo<CommandConfig>(() => normalizeCommandConfig(params), [params]);
-  const frames = config.frames;
+  const config = params;
+  // 空帧兜底数组须记忆化 — 否则作为 useMemo 依赖每次渲染都是新引用
+  const frames = useMemo(
+    () => (config.frames.length > 0 ? config.frames : [makeEmptyFrame(config.id)]),
+    [config.frames, config.id]
+  );
 
   // 当前选中帧 (activeFrameId 失效时回退第一帧)
   const [activeFrameId, setActiveFrameId] = useState<string | null>(null);
@@ -229,7 +231,7 @@ export function CommandSender({ widget }: CommandSenderProps) {
   const handleSend = async () => {
     setError(null);
     if (!canSend) {
-      setError(t(lang, 'cmdSendRequiresRun'));
+      setError(translate('cmdSendRequiresRun', lang));
       return;
     }
     try {
@@ -271,7 +273,7 @@ export function CommandSender({ widget }: CommandSenderProps) {
   };
 
   const addFrame = () => {
-    const frame = makeEmptyFrame(id, `${t(lang, 'cmdNewFrame')} ${frames.length + 1}`);
+    const frame = makeEmptyFrame(id, `${translate('cmdNewFrame', lang)} ${frames.length + 1}`);
     applyFrames([...frames, frame]);
     setActiveFrameId(frame.id);
   };

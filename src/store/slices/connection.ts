@@ -4,10 +4,11 @@ import { clearRawDataTransportBuffers } from '../../lib/buffers/rawDataBuffers';
 import { resetPortSampleStoresForSource } from '../../lib/data/dataClient';
 import { notify } from '../../lib/tauri/notifications';
 import { nodeError } from '../../lib/tauri/errorGuidance';
-import { t } from '../../i18n';
+import { translate } from '../../i18n';
 import { downstreamProtocolOf } from '../appStoreHelpers';
 import { resolveSimulation } from '../../lib/acquisition/simulation';
-import { refreshEndpointSnapshots } from '../../lib/acquisition/useEndpointSnapshot';
+import { simulationConfig, withSimulation, type AcquisitionNodeData } from '../../lib/acquisition/acquisitionNodes';
+import { refreshDeviceNodeSnapshots } from '../../lib/acquisition/useDeviceNodeSnapshot';
 import { useSettingsStore } from '../settingsStore';
 import type { ConnectionState, PortInfo, TransportStats, WidgetBinding, WidgetConfig } from '../../types';
 import type { AppSlice } from './types';
@@ -53,11 +54,11 @@ export const createConnectionSlice: AppSlice<ConnectionSlice> = (set, get) => {
       } catch (e) {
         const lang = get().lang;
         notify.error(
-          t(lang, 'notifRefreshPortsFailed'),
+          translate('notifRefreshPortsFailed', lang),
           nodeError(lang, e),
           {
             source: 'refreshPorts',
-            actions: [{ label: t(lang, 'notifRetry'), run: () => { void get().refreshPorts(); } }],
+            actions: [{ label: translate('notifRetry', lang), run: () => { void get().refreshPorts(); } }],
           }
         );
       }
@@ -82,12 +83,29 @@ export const createConnectionSlice: AppSlice<ConnectionSlice> = (set, get) => {
         clearRawDataTransportBuffers(nodeId);
         if (downstreamId) resetPortSampleStoresForSource(downstreamId);
         waveformWindow.clear();
+        // 测试数据编码跟随下游解析器: resolve 结果写回设备文档后端 open 才拿得到。
+        // 后端 open 只读已同步的图文档, 编码停留在旧值 (如 JustFloat) 时下游
+        // 协议节点解析不出任何帧 (CAN/波形面板全空)。直接补丁不进撤销历史,
+        // 也不触发 structure diff 的 mustClose 竞态 — open 紧随其后无需关闭。
+        const device = (node.data as AcquisitionNodeData).node;
+        const simulation = resolveSimulation(node, get().rfNodes, get().rfEdges);
+        if (
+          simulation &&
+          JSON.stringify(simulation.encoding) !== JSON.stringify(simulationConfig(device)?.encoding)
+        ) {
+          set((s) => ({
+            rfNodes: s.rfNodes.map((n) =>
+              n.id === nodeId && n.type === 'acquisition'
+                ? { ...n, data: { ...n.data, node: withSimulation(device, simulation) } }
+                : n,
+            ),
+          }));
+        }
         const error = await get().syncTabGraph(node.data.tabId as string);
         if (error) throw new Error(error);
-        resolveSimulation(node, get().rfNodes, get().rfEdges);
-        await api.openAcquisitionEndpoint(nodeId);
-        if (!get().rfNodes.some(n => n.id === nodeId)) { await api.closeAcquisitionEndpoint(nodeId); return; }
-        await refreshEndpointSnapshots();
+        await api.openAcquisitionNode(nodeId);
+        if (!get().rfNodes.some(n => n.id === nodeId)) { await api.closeAcquisitionNode(nodeId); return; }
+        await refreshDeviceNodeSnapshots();
         set((s) => ({
           connectionStates: { ...s.connectionStates, [nodeId]: 'Connected' as ConnectionState },
           nodeStats: { ...s.nodeStats, [nodeId]: { ...EMPTY_NODE_STATS } },
@@ -98,11 +116,11 @@ export const createConnectionSlice: AppSlice<ConnectionSlice> = (set, get) => {
           connectionStates: { ...s.connectionStates, [nodeId]: 'Error' as ConnectionState },
         }));
         notify.error(
-          t(lang, 'notifConnectFailed'),
+          translate('notifConnectFailed', lang),
           nodeError(lang, e),
           {
             source: 'connect',
-            actions: [{ label: t(lang, 'notifRetry'), run: () => { void get().connectNode(nodeId); } }],
+            actions: [{ label: translate('notifRetry', lang), run: () => { void get().connectNode(nodeId); } }],
           }
         );
       }
@@ -123,11 +141,11 @@ export const createConnectionSlice: AppSlice<ConnectionSlice> = (set, get) => {
           connectionStates: { ...s.connectionStates, [nodeId]: 'Error' as ConnectionState },
         }));
         notify.error(
-          t(lang, 'notifDisconnectFailed'),
+          translate('notifDisconnectFailed', lang),
           nodeError(lang, e),
           {
             source: 'disconnect',
-            actions: [{ label: t(lang, 'notifRetry'), run: () => { void get().disconnectNode(nodeId); } }],
+            actions: [{ label: translate('notifRetry', lang), run: () => { void get().disconnectNode(nodeId); } }],
           }
         );
       }
@@ -138,7 +156,7 @@ export const createConnectionSlice: AppSlice<ConnectionSlice> = (set, get) => {
         await api.sendRaw(nodeId, data);
       } catch (e) {
         const lang = get().lang;
-        notify.error(t(lang, 'notifSendFailed'), nodeError(lang, e), { source: 'sendData' });
+        notify.error(translate('notifSendFailed', lang), nodeError(lang, e), { source: 'sendData' });
       }
     },
 
@@ -170,7 +188,7 @@ export const createConnectionSlice: AppSlice<ConnectionSlice> = (set, get) => {
         }));
       } catch (e) {
         const lang = get().lang;
-        notify.error(t(lang, 'notifSendFailed'), nodeError(lang, e), { source: 'sendAndCapture' });
+        notify.error(translate('notifSendFailed', lang), nodeError(lang, e), { source: 'sendAndCapture' });
       }
     },
 
@@ -179,7 +197,7 @@ export const createConnectionSlice: AppSlice<ConnectionSlice> = (set, get) => {
         await api.sendString(nodeId, text);
       } catch (e) {
         const lang = get().lang;
-        notify.error(t(lang, 'notifSendFailed'), nodeError(lang, e), { source: 'sendText' });
+        notify.error(translate('notifSendFailed', lang), nodeError(lang, e), { source: 'sendText' });
       }
     },
 
@@ -188,7 +206,7 @@ export const createConnectionSlice: AppSlice<ConnectionSlice> = (set, get) => {
         await api.sendWidgetValue(nodeId, protocolNode, binding, value);
       } catch (e) {
         const lang = get().lang;
-        notify.error(t(lang, 'notifSendFailed'), nodeError(lang, e), { source: 'sendWidget' });
+        notify.error(translate('notifSendFailed', lang), nodeError(lang, e), { source: 'sendWidget' });
       }
     },
   };

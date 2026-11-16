@@ -3,16 +3,15 @@
 //! 状态机: idle → checking → up-to-date / available → downloading → ready (待重启)
 //!        任意阶段失败 → error
 //! 后端契约:
-//! - invoke('check_update', { channel }) → { available, currentVersion, version, notes, date }
-//! - invoke('download_and_install_update') → void, 期间 emit update://progress, 完成 emit update://ready
+//! - transport.call('check_update', { channel }) → { available, currentVersion, version, notes, date }
+//! - transport.call('download_and_install_update') → void, 期间 emit update://progress, 完成 emit update://ready
 //! 取代原 useUpdater hook (React 局部状态无法支撑状态栏/弹窗/设置三处共享)
 
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { getVersion } from '@tauri-apps/api/app';
-import { relaunch as processRelaunch } from '@tauri-apps/plugin-process';
+import { platform } from '../lib/platform';
+import { transport } from '../lib/rpc';
 import { useSettingsStore } from './settingsStore';
+import { errorText } from '../types/errors';
 
 export type UpdateStatus =
   | 'idle'
@@ -38,6 +37,11 @@ interface CheckUpdateResult {
   version: string | null;
   notes: string | null;
   date: string | null;
+  /// 远程配置入口: 发布方要求本次启动显示配置引导。
+  ///
+  /// 目前后端恒不返回该字段 (缺省 = 不要求) —— 位置先留好, 将来由更新 manifest 提供,
+  /// 前端接线处 (见 `lib/startup/configGuide`) 不必再改。
+  configGuide?: boolean | null;
 }
 
 interface UpdateStore {
@@ -50,6 +54,8 @@ interface UpdateStore {
   progress: number;
   error: string | null;
   dialogOpen: boolean;
+  /// 发布方通过远程配置要求显示配置引导 (缺省 false)。
+  remoteConfigGuide: boolean;
 
   check: (trigger: 'auto' | 'manual') => Promise<void>;
   downloadAndInstall: () => Promise<void>;
@@ -61,20 +67,16 @@ interface UpdateStore {
 }
 
 /// 解析更新通道: 显式设置优先; 否则按当前版本推导 (含 '-' 视为预发布 → beta)
-/// getVersion 失败 (非 Tauri 环境) 时回退 stable
+/// getAppVersion 失败 (非 Tauri 环境) 时回退 stable
 export async function resolveUpdateChannel(): Promise<UpdateChannel> {
   const explicit = useSettingsStore.getState().settings.general.updateChannel;
   if (explicit) return explicit;
   try {
-    const version = await getVersion();
+    const version = await platform.getAppVersion();
     return version.includes('-') ? 'beta' : 'stable';
   } catch {
     return 'stable';
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export const useUpdateStore = create<UpdateStore>((set, get) => ({
@@ -85,12 +87,15 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
   progress: 0,
   error: null,
   dialogOpen: false,
+  remoteConfigGuide: false,
 
   check: async (trigger) => {
     set({ status: 'checking', lastTrigger: trigger, error: null });
     try {
       const channel = await resolveUpdateChannel();
-      const res = await invoke<CheckUpdateResult>('check_update', { channel });
+      const res = await transport.call<CheckUpdateResult>('check_update', { channel });
+      // 远程配置与"有没有新版本"无关: 后端每次回答都以它为准 (缺省 = 不要求)。
+      const remoteConfigGuide = res.configGuide === true;
       if (res.available && res.version) {
         set({
           status: 'available',
@@ -100,6 +105,7 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
             date: res.date ?? '',
           },
           currentVersion: res.currentVersion,
+          remoteConfigGuide,
         });
         // 自动检查只在用户未跳过该版本时打扰用户; 手动检查不自动弹窗
         const skipped = useSettingsStore.getState().settings.general.skippedUpdateVersion;
@@ -107,11 +113,16 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
           set({ dialogOpen: true });
         }
       } else {
-        set({ status: 'up-to-date', updateInfo: null, currentVersion: res.currentVersion });
+        set({
+          status: 'up-to-date',
+          updateInfo: null,
+          currentVersion: res.currentVersion,
+          remoteConfigGuide,
+        });
       }
     } catch (e) {
       // auto 失败不打断用户 — 仅记录状态, UI 层对 auto 失败保持静默
-      set({ status: 'error', error: errorMessage(e) });
+      set({ status: 'error', error: errorText(e) });
     }
   },
 
@@ -119,30 +130,29 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
     set({ status: 'downloading', progress: 0, error: null });
     let unlisten: (() => void) | null = null;
     try {
-      unlisten = await listen<{ received: number; total: number | null }>(
+      unlisten = await transport.listen<{ received: number; total: number | null }>(
         'update://progress',
-        (event) => {
-          const { received, total } = event.payload;
+        ({ received, total }) => {
           // total 未知时保持不确定态 (进度条停在原值)
           if (total && total > 0) {
             set({ progress: Math.min(100, Math.round((received / total) * 100)) });
           }
         }
       );
-      await invoke('download_and_install_update');
+      await transport.call('download_and_install_update');
       // invoke resolve 与 update://ready 事件二者取先到 — 此处兜底
       if (get().status === 'downloading') {
         set({ status: 'ready', progress: 100 });
       }
     } catch (e) {
-      set({ status: 'error', error: errorMessage(e) });
+      set({ status: 'error', error: errorText(e) });
     } finally {
       unlisten?.();
     }
   },
 
   relaunch: async () => {
-    await processRelaunch();
+    await platform.relaunchApp();
   },
 
   skipVersion: () => {
@@ -163,7 +173,7 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
 }));
 
 /// 后端安装完成事件 — 模块加载时注册一次 (store 与应用同生命周期, 无需清理)
-void listen('update://ready', () => {
+void transport.listen('update://ready', () => {
   if (useUpdateStore.getState().status === 'downloading') {
     useUpdateStore.setState({ status: 'ready', progress: 100 });
   }

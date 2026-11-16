@@ -10,10 +10,23 @@ use std::collections::{HashSet, VecDeque};
 pub fn resolve(nodes: &mut [NodeDef], edges: &[Edge]) {
     let snapshot = nodes.to_vec();
     for node in nodes {
-        let NodeKind::Acquisition { spec, ports } = &mut node.kind else {
+        let NodeKind::Acquisition {
+            node: device,
+            ports,
+        } = &mut node.kind
+        else {
             continue;
         };
-        let Some(simulation) = &mut spec.simulation else {
+        let Some(simulation_node) = device
+            .children
+            .iter_mut()
+            .find(|child| child.driver.as_str() == data_model::device_tree::SIMULATION_DRIVER_ID)
+        else {
+            continue;
+        };
+        let Ok(mut simulation) = serde_json::from_value::<data_model::device::SimulationConfig>(
+            simulation_node.config.clone(),
+        ) else {
             continue;
         };
         if ports
@@ -63,6 +76,8 @@ pub fn resolve(nodes: &mut [NodeDef], edges: &[Edge]) {
                     .and_then(|(_, encoding)| encoding.clone())
             },
         );
+        simulation_node.config =
+            serde_json::to_value(simulation).expect("simulation configuration is serializable");
     }
 }
 
@@ -106,7 +121,7 @@ fn frame_decoder_encoding(blocks: &[DecoderBlockDef]) -> Option<serde_json::Valu
     }
     let schema = ProtocolSchema {
         preset: SchemaPreset::Custom,
-        legacy_config: None,
+        preset_config: None,
         decode: blocks.to_vec(),
         encode: Some(encode),
     };
@@ -114,36 +129,5 @@ fn frame_decoder_encoding(blocks: &[DecoderBlockDef]) -> Option<serde_json::Valu
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn derives_only_reversible_frame_decoder_layouts() {
-        let supported = vec![
-            DecoderBlockDef::Header {
-                id: "head".into(),
-                hex: "AA".into(),
-                match_id: None,
-            },
-            DecoderBlockDef::Field {
-                id: "value".into(),
-                field_type: FieldType::Float32LE,
-                port_name: "value".into(),
-                length_ref: None,
-                match_id: None,
-            },
-        ];
-        assert!(frame_decoder_encoding(&supported).is_some());
-
-        let unsupported = vec![DecoderBlockDef::Bitfield {
-            id: "bits".into(),
-            byte_offset: 0,
-            bit_offset: 0,
-            bit_length: 1,
-            is_signed: false,
-            port_name: "flag".into(),
-            match_id: None,
-        }];
-        assert!(frame_decoder_encoding(&unsupported).is_none());
-    }
-}
+#[path = "simulation_tests.rs"]
+mod tests;

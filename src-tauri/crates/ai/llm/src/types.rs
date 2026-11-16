@@ -85,7 +85,8 @@ pub struct AiProviderConfig {
     pub max_tokens: Option<u32>,
 }
 
-/// 适配器元数据 — 设置 UI 下拉与默认端点提示。
+/// 适配器元数据 — 目录/设置 UI 与默认端点声明 (由 [`adapter_kind_from_str`]
+/// 与 [`ADAPTERS`] 共用同一注册来源, 不再各写一份)。
 #[derive(Debug, Clone, Serialize)]
 pub struct AdapterInfo {
     /// 适配器标识。
@@ -94,6 +95,10 @@ pub struct AdapterInfo {
     pub label: &'static str,
     /// 默认 API 端点 (提示用;`openai_compatible` 必须自定义)。
     pub default_base_url: &'static str,
+    /// 是否必须提供自定义 base_url 才可用。
+    pub requires_custom_url: bool,
+    /// 是否需要 API key (ollama 本地实例通常不需要)。
+    pub requires_api_key: bool,
 }
 
 /// 支持的适配器注册表 (genai 原生协议)。
@@ -103,71 +108,107 @@ pub const ADAPTERS: &[AdapterInfo] = &[
         id: "orcarouter",
         label: "OrcaRouter",
         default_base_url: "https://api.orcarouter.ai/v1",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "openai",
         label: "OpenAI",
         default_base_url: "https://api.openai.com/v1",
+        requires_custom_url: false,
+        requires_api_key: true,
+    },
+    // OpenAI Responses API 协议适配器 (genai OpenAIResp)
+    AdapterInfo {
+        id: "openai_responses",
+        label: "OpenAI Responses",
+        default_base_url: "https://api.openai.com/v1",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "anthropic",
         label: "Anthropic Claude",
         default_base_url: "https://api.anthropic.com",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "gemini",
         label: "Google Gemini",
         default_base_url: "https://generativelanguage.googleapis.com",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "deepseek",
         label: "DeepSeek",
         default_base_url: "https://api.deepseek.com",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "moonshot",
         label: "Moonshot Kimi",
         default_base_url: "https://api.moonshot.cn/v1",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "zai",
         label: "智谱 GLM (Z.ai)",
         default_base_url: "https://api.z.ai/api/paas/v4",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "bigmodel",
         label: "智谱 BigModel",
         default_base_url: "https://open.bigmodel.cn/api/paas/v4",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "aliyun",
         label: "阿里云百炼 (Qwen)",
         default_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "openrouter",
         label: "OpenRouter",
         default_base_url: "https://openrouter.ai/api/v1",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "groq",
         label: "Groq",
         default_base_url: "https://api.groq.com/openai/v1",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "xai",
         label: "xAI Grok",
         default_base_url: "https://api.x.ai/v1",
+        requires_custom_url: false,
+        requires_api_key: true,
     },
     AdapterInfo {
         id: "ollama",
         label: "Ollama (本地)",
         default_base_url: "http://localhost:11434",
+        requires_custom_url: false,
+        requires_api_key: false,
     },
     AdapterInfo {
         id: "openai_compatible",
         label: "OpenAI 兼容 (自定义端点)",
         default_base_url: "",
+        requires_custom_url: true,
+        requires_api_key: true,
     },
 ];
 
@@ -176,12 +217,13 @@ pub const fn list_adapters() -> &'static [AdapterInfo] {
     ADAPTERS
 }
 
-/// 适配器字符串 → genai `AdapterKind`;`openai_compatible` / `orcarouter`
-/// 复用 OpenAI 协议。
+/// 适配器字符串 → genai `AdapterKind`。注册来源与 [`ADAPTERS`] 单一一致 —
+/// 每个目录 id 都可解析, 解析表没有目录之外的 id (测试保证)。
+/// `openai_compatible` / `orcarouter` 复用 OpenAI 协议。
 ///
 /// # Errors
 /// 未知适配器字符串返回 [`AiError::UnknownAdapter`]。
-pub fn adapter_kind_from_str(adapter: &str) -> data_model::Result<AdapterKind> {
+pub fn adapter_kind_from_str(adapter: &str) -> error::Result<AdapterKind> {
     let kind = match adapter {
         "openai" | "openai_compatible" | "orcarouter" => AdapterKind::OpenAI,
         "openai_responses" => AdapterKind::OpenAIResp,
@@ -200,7 +242,7 @@ pub fn adapter_kind_from_str(adapter: &str) -> data_model::Result<AdapterKind> {
             return Err(AiError::UnknownAdapter {
                 adapter: adapter.to_string(),
             }
-            .into())
+            .into());
         }
     };
     Ok(kind)
@@ -234,3 +276,7 @@ pub enum ProviderEvent {
         output_tokens: Option<u64>,
     },
 }
+
+#[cfg(test)]
+#[path = "types_adapter_registry_tests.rs"]
+mod adapter_registry_tests;

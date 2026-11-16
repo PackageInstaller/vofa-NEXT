@@ -1,40 +1,40 @@
 # Lissio
 
-[English](./README.md) | [简体中文](./README.zh-CN.md)
+<!-- lissio-doc
+status: maintained
+owner: Lissio maintainers
+last-reviewed: 2026-10-15
+applies-to: Product overview, setup, development, and distribution
+-->
+
+All repository documentation is English. Historical review records and product
+localization resources are the only non-English surfaces.
 
 A next-generation serial assistant fully rebuilt with Rust + Tauri — built for embedded debugging, waveform visualization, node-based dataflow orchestration, CAN/automotive diagnostics, and logic analysis.
 
-<!-- PROJECT SHIELDS -->
-
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![GPL v2 License][license-shield]][license-url]
 
 <!-- PROJECT LOGO -->
 <br />
 
 <p align="center">
-  <a href="https://github.com/horldsence/lissio">
-    <img src="icon.png" alt="Logo" width="80" height="80">
+  <a href="https://codeberg.org/Horldsence/Lissio">
+    <img src="src-tauri/icons/icon.png" alt="Logo" width="80" height="80">
   </a>
 
   <h3 align="center">Lissio</h3>
   <p align="center">
     A modern serial debugging tool with waveform display, node editor, multi-protocol parsing, CAN diagnostics, and logic analysis.
     <br />
-    <a href="https://github.com/horldsence/lissio"><strong>Explore the repo »</strong></a>
+    <a href="https://codeberg.org/Horldsence/Lissio"><strong>Explore the repo »</strong></a>
     <br />
     <br />
-    <a href="https://github.com/horldsence/lissio/issues">Report Bug</a>
+    <a href="https://codeberg.org/Horldsence/Lissio/issues">Report Bug</a>
     ·
-    <a href="https://github.com/horldsence/lissio/issues">Request Feature</a>
+    <a href="https://codeberg.org/Horldsence/Lissio/issues">Request Feature</a>
   </p>
 </p>
 
-![](./images/example.png)
-![](./images/example2.png)
+![Lissio application example](./images/example.png)
 
 ## Table of Contents
 
@@ -74,7 +74,7 @@ The UI features a **dock-style window layout**: control canvases and data views 
 
 ### Protocol Engines
 
-- **JustFloat** & **FireWater** — VOFA+ protocols with automatic channel detection.
+- **JustFloat** & **FireWater** — VOFA+-compatible protocol formats with automatic channel detection.
 - **RawData** — raw byte stream inspection.
 - **Slcan** / **CandleLight** — CAN frame parsing.
 - **LogicDecode** — UART / I2C / SPI protocol decoding from sampled digital levels.
@@ -124,7 +124,7 @@ The UI features a **dock-style window layout**: control canvases and data views 
   - Drag a tab to a card's edge → split it into a standalone panel;
   - Drag an empty area of the title bar → move the whole card next to another card;
   - Drag a tab / card to the four edges of the page → dock as a full row / column strip.
-  - The layout tree and card sizes persist automatically (`vofa-dock`) and survive restarts.
+  - The layout tree and card sizes persist automatically (`vofa-dock`, an internal persistence identifier) and survive restarts.
 - **Dual tab system** — control-canvas tabs (node editor) and data tabs (waveform / raw data / CAN / logic analyzer, etc.) can be mixed and arranged freely.
 - **Status bar** — connection state, transport / protocol, RX / TX bytes and frames, CAN load, and buffer usage at a glance.
 - **Multiple tabs** — each tab can be named, renamed, duplicated, and closed independently.
@@ -134,7 +134,7 @@ The UI features a **dock-style window layout**: control canvases and data views 
 - VSCode-style layout: activity bar, sidebar, resizable panels, status bar, multiple tabs.
 - Native menu bar (macOS / Windows / Linux) and global shortcuts (`Ctrl+,` for settings; menu items for new / close tab and toggle sidebar).
 - **i18n** — Chinese / English UI copy managed via YAML.
-- **Settings modal** — general / appearance / editor / data / serial / notifications, persisted via `tauri-plugin-store`.
+- **Settings modal** — general / appearance / editor / data / serial / notifications, persisted by the connected backend.
 - **Full-app config export / import** — back up settings, protocol, transport, widgets, node graph, data tabs and view preferences to a single JSON file via system file dialogs, for easy migration.
 - Custom theme editor, onboarding wizard, help center, and contextual hints.
 - Transparent window with acrylic / vibrancy effect (macOS).
@@ -194,7 +194,7 @@ The default layout looks like this (all panels can be freely rearranged):
 - **Settings**: `Ctrl+,` / `Cmd+,` or the gear icon in the activity bar; full-app config export / import is available (backup to a single JSON file).
 - **Undo & time travel**: `Ctrl+Z` to undo, `Ctrl+Y` to redo; clicking any entry in the Operation History panel jumps back to that moment (see Core Features).
 - **Refresh ports**: the refresh button in the status bar or the context menu.
-- **Help & onboarding**: the help icon at the bottom of the activity bar opens the Help Center anytime; a guided tour appears on first launch (can be disabled in Settings).
+- **Help & onboarding**: the help icon at the bottom of the activity bar opens the Help Center anytime; a guided tour appears on first launch. Closing or finishing it disables automatic reminders; Help Center can replay it anytime. Settings read/write errors offer a retry action.
 
 ## Tech Stack
 
@@ -220,97 +220,67 @@ The default layout looks like this (all panels can be freely rearranged):
 - [parking_lot](https://github.com/Amanieu/parking_lot) — synchronization
 - [window-vibrancy](https://github.com/tauri-apps/window-vibrancy) — acrylic / mica effects
 - [libautomotive](https://crates.io/crates/libautomotive) — UDS / OBD-II / J1939 diagnostics
-- Tauri plugins: `tauri-plugin-log`, `tauri-plugin-notification`, `tauri-plugin-store`, `tauri-plugin-opener`
+- Tauri plugins: `tauri-plugin-log`, `tauri-plugin-notification`, `tauri-plugin-opener`
 
-### Backend Workspace Crates
+### Backend Workspace Architecture
 
-| Crate | Responsibility |
+The Rust workspace is grouped by responsibility domain and constrained by declared
+dependency layers. The composition roots are the Tauri shell (`lissio`),
+`backend-server`, and `backend-cli`; product capabilities are shared through
+`control-api`, command dispatch through `rpc-api`, and assembly through
+`backend-host`.
+
+| Domain | Structural responsibility |
 | --- | --- |
-| `vofa_core` | Core types & config (transport / widget / pipeline configs, error types) |
-| `schema_types` / `schema_engine` | Protocol frame schema types & schema-driven protocol engine |
-| `can_types` / `logic_types` / `logic_decoder` / `diagnostic` | CAN / logic / diagnostics types & decoders |
-| `transport_core` / `serial` / `net` / `can_bridge` | Transport layer (serial / TCP / UDP / Slcan / CandleLight / test data) |
-| `protocol_engine` / `protocol_float` / `protocol_can_bridge` | Protocol engines (JustFloat / FireWater / RawData / Slcan / CandleLight / LogicDecode) |
-| `buffer_ring` / `buffer_databuffer` / `buffer_raw` / `buffer_graph` | Ring buffer, multi-channel `DataBuffer`, raw-data collector, graph routing |
-| `kind` / `hir` / `plane` / `lower` / `eval` / `engine` / `frame_decoder` / `trigger` | DAG node definitions, compiler pipeline (HIR → plane projection → lowering → slot runtime) & facade, frame decoder, trigger matching |
-| `dsp_window` / `dsp_fft` / `dsp_filter` | Digital signal processing (window functions, FFT spectrum, FIR/IIR filters) |
-| `automotive_isotp` / `automotive_can` / `automotive_diag` | Diagnostic engine (ISO-TP / UDS / OBD-II / J1939) bridging CAN backends |
-| `data_plane` / `stream` / `dispatcher` / `subscription` | Data plane: byte routing, chunked stream dispatch, subscription registry |
-| `app_state` / `notify_events` / `menu_shell` / `update_flow` | App state & tickers, frontend event contracts & notifications, menu, updater |
-| `cmd_*` (7 crates) | Tauri commands (buffer / can_load / can_transport / debug / graph / pipeline / rawdata) |
+| `shared` | Stable contracts: errors, flow envelopes, data/config models, subscriptions |
+| `signal` | Waveform buffers, raw data, filters, spectrum, measurements, GPU envelope adapter |
+| `vehicle` | CAN and diagnostic protocol types |
+| `protocol` | Protocol/schema engines, frame decoding, logic decoding, points, acquisition contracts |
+| `graph` | Node definitions and the HIR → plane → lower → eval compiler/runtime pipeline |
+| `transport` | Device tree contracts and serial/network/CAN/industrial protocol adapters |
+| `data` | Data bus and recording storage |
+| `ai` | LLM clients, chat/session state, MCP client |
+| `desktop` | Pipeline/application state, capability core, RPC dispatch, backend host/server/CLI, AI host, platform shell |
+
+See [`docs/architecture/crates.md`](docs/architecture/crates.md) for the complete
+crate inventory, dependency layers, domain DAG, and architecture checks.
 
 ## Project Structure
 
-```
+```text
 lissio/
-├── scripts/                       # Build scripts
-│   └── build.sh
-├── src/                           # Frontend source
-│   ├── components/
-│   │   ├── controls/              # Knob / Button / Slider / Radio / Checkbox / Label
-│   │   ├── displays/              # Waveform / Gauge / LED / PieChart / Spectrum /
-│   │   │                          # Image / NumberDisplay / Model3D / TableView /
-│   │   │                          # CanView / CanSender / CanLoadView / LogicView /
-│   │   │                          # RawDataView / CommandSender / FrameDecoder /
-│   │   │                          # OperationHistory / ...
-│   │   ├── layout/                # ActivityBar / Sidebar / DockLayout /
-│   │   │                          # DockCardFrame / DataTabContent / NodeEditor /
-│   │   │                          # StatusBar / BufferUsageStats / CanLoadAlarm
-│   │   ├── nodes/                 # React Flow node types (ChannelSource / Widget)
-│   │   ├── onboarding/            # OnboardingWizard / HelpCenter / Tour / ContextualHint
-│   │   ├── panels/
-│   │   │   ├── transport/         # Serial / Udp / TcpClient / TcpServer / TestData /
-│   │   │   │                      # Slcan / Candle forms
-│   │   │   ├── PortPicker.tsx
-│   │   │   ├── ProtocolSection.tsx
-│   │   │   ├── TransportConfigPanel.tsx
-│   │   │   └── WidgetPalette.tsx
-│   │   ├── ui/                    # ContextMenu / PanelTabs / ToolbarIconButton /
-│   │   │                          # WidgetCard / SlidingPill / SnapDropOverlay /
-│   │   │                          # AnimatedSwitch
-│   │   ├── AboutModal.tsx
-│   │   ├── CodeEditor.tsx
-│   │   ├── CustomWidgetEditor.tsx
-│   │   ├── NotificationToasts.tsx
-│   │   ├── SettingsModal.tsx
-│   │   └── ThemeEditor.tsx
-│   ├── i18n/                      # i18n loader + locales (en.yml / zh.yml)
-│   ├── lib/                       # Tauri API / buffers / subscriptions / utils / config export
-│   ├── settings/                  # Settings schema, defaults, theme application
-│   ├── store/                     # Zustand stores (connection / data / graph / tabs /
-│   │                              # dock layout / waveform scope / ... slices)
-│   ├── types/                     # TypeScript types (can / logic / transport / waveform / ...)
-│   ├── App.tsx                    # Top-level layout orchestration (activity bar + sidebar
-│   │                              # + dock area + status bar)
+├── docs/architecture/             # Architecture contracts and design references
+├── scripts/                       # Architecture, contract, build, and release tooling
+├── src/                           # React/TypeScript frontend
+│   ├── components/                # Controls, displays, layout, nodes, panels, AI UI
+│   ├── lib/
+│   │   ├── acquisition/           # Device tree and capability projections
+│   │   ├── ai/                    # Chat/tool frontend integration
+│   │   ├── models/                # Model catalog creation/describe consumers
+│   │   ├── platform/              # Desktop/Web platform-service shim
+│   │   ├── rpc/                   # Transport contract and reconnect/rehydration
+│   │   └── ...                    # Buffers, graph, quickstart, protocol utilities
+│   ├── store/                     # Zustand stores and state slices
+│   ├── types/
+│   │   └── generated/             # Rust-owned wire contracts exported by ts-rs
+│   ├── i18n/locales/              # English and Chinese user-facing copy
+│   ├── App.tsx
 │   └── main.tsx
-├── src-tauri/                     # Tauri + Rust backend
-│   ├── crates/                    # Rust workspace (see table above)
+├── src-tauri/
+│   ├── crates/<domain>/<crate>    # Rust workspace members
 │   ├── src/
-│   │   ├── commands/              # Tauri command handlers (transport/protocol/buffer/
-│   │   │                          # graph/can/logic/can_load/frame_decoder/window/...)
-│   │   ├── pipeline/              # data_loop / decoder_feed / graph_eval / spectrum_sync
-│   │   ├── state/                 # AppState / tickers (graph output / custom input / spectrum)
-│   │   ├── subscription/          # Event subscription manager
-│   │   ├── commands.rs
-│   │   ├── menu.rs                # Native menu bar
-│   │   ├── notify.rs
-│   │   ├── lib.rs
+│   │   ├── shell.rs               # Desktop-only window/splash/settings shell commands
+│   │   ├── sidecar.rs             # Supervised lissio-server lifecycle and diagnostics
+│   │   ├── lib.rs                 # Tauri composition root
 │   │   └── main.rs
-│   ├── capabilities/default.json
-│   ├── icons/                     # App icons (macOS / Windows / iOS / Android)
-│   ├── build.rs
-│   ├── Cargo.toml
+│   ├── Cargo.toml                 # Workspace and dependency authority
 │   └── tauri.conf.json
-├── public/                        # Static assets (tauri.svg / vite.svg)
+├── packaging/                     # Server startup and container packaging
+├── public/                        # Static application assets
 ├── images/                        # README assets
-├── .github/workflows/             # CI: build.yml / release.yml
 ├── package.json
 ├── pnpm-workspace.yaml
-├── tsconfig.json
-├── tsconfig.node.json
-├── vite.config.ts
-├── index.html
-└── README.md
+└── vite.config.ts
 ```
 
 ## Prerequisites
@@ -326,7 +296,7 @@ lissio/
 1. Clone the repository
 
 ```sh
-git clone https://github.com/horldsence/lissio.git
+git clone https://codeberg.org/Horldsence/Lissio.git
 cd lissio
 ```
 
@@ -336,25 +306,125 @@ cd lissio
 pnpm install
 ```
 
-3. Start the dev environment
+Lissio ships as three independent units: a Backend/CLI archive, a static Web archive,
+and a Desktop installer whose Tauri shell supervises a bundled, same-version
+`lissio-server` sidecar.
+
+### Desktop (Tauri)
 
 ```sh
-pnpm tauri dev
+pnpm dev:desktop    # prepares and starts the sidecar, Vite, and native shell
+pnpm build:desktop  # packaged installers → src-tauri/target/release/bundle/
 ```
 
-The app loads the frontend at `http://localhost:1420` by default and launches a Tauri desktop window.
+Desktop business calls always use HTTP/WebSocket. Tauri IPC is limited to windows,
+menus, updates, file dialogs, and sidecar supervision. A connection diagnostic page is
+shown before application stores mount when the sidecar is missing, unauthorized,
+incompatible, or has crashed.
+
+For Linux/Wayland rendering checks, device-selector behavior, and commands that
+preserve other platform build caches, see
+[Linux desktop rendering](docs/architecture/linux-rendering.md).
+
+### Standalone web server (`lissio-server`)
+
+```sh
+pnpm build:web                              # frontend → dist/
+pnpm dev:server --static-dir dist           # HTTP API + web app in one process
+```
+
+Then open `http://127.0.0.1:8790`. On the first visit append the access token as
+`?token=<server-token>` — the browser keeps it in sessionStorage and immediately removes
+the parameter from the address bar. The token file is created on first start and its path is printed to the
+server log: `~/Library/Application Support/top.pengheng.lissio/server-token` (macOS),
+`%APPDATA%\top.pengheng.lissio\server-token` (Windows),
+`~/.config/top.pengheng.lissio/server-token` (Linux). You can also set `LISSIO_TOKEN`
+explicitly.
+
+| flag | env | default |
+|---|---|---|
+| `--bind` | `LISSIO_BIND` | `127.0.0.1` |
+| `--http-port` | `LISSIO_HTTP_PORT` | `8790` |
+| `--token` / `--token-file` | `LISSIO_TOKEN` | `<config dir>/server-token` (0600) |
+| `--static-dir` | `LISSIO_STATIC_DIR` | off (API only) |
+| `--cors-origin` (repeatable) | `LISSIO_CORS_ORIGINS` | off (same-origin) |
+| `--mcp-port` / `--no-mcp` | `LISSIO_MCP_PORT` | `8765` / MCP enabled |
+
+Exposing beyond loopback requires `--bind 0.0.0.0` plus a strong `LISSIO_TOKEN`.
+`pnpm server` is equivalent to `cd src-tauri && cargo run -p lissio-backend-server`; the CLI
+form `cargo run -p lissio-backend-cli -- serve` shares the same code path. Health check:
+`curl http://127.0.0.1:8790/api/v1/health`.
+
+AI, session, external MCP, inbound MCP, and frontend-tool commands have the same feature
+surface in Desktop and Web. Saved provider keys are write-only: the UI receives only
+`configured`, `source`, and `writable`. Deployment fallback variables use
+`LISSIO_AI_API_KEY_<ADAPTER>` (for example `LISSIO_AI_API_KEY_OPENAI`).
+Debug builds read these keys directly from the repository root `.env` on each request and do
+not access the system keychain. Copy `.env.example` to `.env` and edit it locally. The file is
+gitignored. Release builds continue to use the system keychain with the environment fallback.
+
+### OCI (server + Web)
+
+```sh
+docker run --rm -p 8790:8790 -p 8765:8765 \
+  -e LISSIO_TOKEN='replace-with-a-strong-token' \
+  -v lissio-data:/var/lib/lissio ghcr.io/horldsence/lissio:latest
+```
+
+The image refuses to start without an explicit token. Map serial/CAN devices with the
+container runtime's device options when hardware access is required.
+
+### Web frontend development (hot reload)
+
+```sh
+pnpm dev:server # terminal 1: standalone backend at :8790
+pnpm dev:web   # terminal 2: vite dev server at :1420, /api proxied to the backend
+```
+
+Open `http://localhost:1420/?token=<server-token>` once (the token persists in
+sessionStorage). Point the proxy at a different backend with
+`LISSIO_DEV_SERVER=http://host:port`.
 
 ## Build & Packaging
 
-Build production frontend assets and package the desktop app:
+Build server, CLI, desktop, and web for the current platform:
 
 ```sh
-pnpm tauri build
+pnpm build:all
 ```
 
-Artifacts are output to `src-tauri/target/release/bundle/`.
+This runs `build:server` (server + CLI), then `build:desktop`, whose Tauri hook builds the web assets once, and finally checks native Windows installer integrity. The build stops if any step fails. Local desktop builds disable updater artifacts using `src-tauri/tauri.local.conf.json`, so `TAURI_SIGNING_PRIVATE_KEY` is not required. Release packaging retains updater signing through the default Tauri configuration.
 
-Cross-platform build examples (see `scripts/build.sh`):
+Individual build commands:
+
+```sh
+pnpm build:web
+pnpm build:server
+pnpm build:cli
+pnpm build:desktop
+```
+
+Web assets are output to `dist/`, server and CLI binaries to `src-tauri/target/release/`, and desktop installers to `src-tauri/target/release/bundle/`.
+
+On Windows, `build:all` finishes with `scripts/finalize-bundles.mjs`. It checks
+the current-version installers in the existing `bundle/nsis/` and `bundle/msi/`
+folders, raises Low integrity labels to Medium, and verifies SHA256 is unchanged.
+A Low-integrity EXE can make NSIS report "Error writing temporary file" even
+when the user's Temp directory is healthy. Installer paths stay fixed inside
+the checkout; there is no separate export command or destination setting.
+If the integrity check fails, run `pnpm build:all` from an ordinary Windows
+terminal outside the sandbox. macOS and Linux skip this Windows-specific step
+and keep Tauri's normal bundle outputs.
+
+On a macOS host, the automated packaging script covers cross-target builds,
+updater signing, and artifact collection:
+
+```sh
+pnpm auto-build              # current macOS architecture (macOS host required)
+pnpm auto-build --all        # macOS (arm64 + x64), Windows, Linux
+```
+
+To drive Tauri directly, for example to build a single bundle:
 
 ```sh
 # Windows cross-compilation
@@ -364,29 +434,25 @@ pnpm tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc
 pnpm tauri build --bundles dmg
 ```
 
-CI workflows are provided in `.github/workflows/` (`build.yml`, `release.yml`).
+CI runs on Codeberg with Forgejo Actions, from `.forgejo/workflows/` (`ci.yml`
+for quality gates, `release.yml` for releases). The gate list is defined once in
+`scripts/gates.mjs`. See [`docs/ci.md`](docs/ci.md) for runner setup, the gate
+registry, and the release pipeline.
 
 ## Testing
 
-Frontend type check:
+Run the same quality surface as CI in one command:
 
 ```sh
-pnpm tsc --noEmit
+pnpm check:all          # everything, with formatting fixes
+pnpm check:all --quick  # PR-tier gates only
+pnpm gates --list       # print the gate inventory
 ```
 
-Frontend production build:
-
-```sh
-pnpm build
-```
-
-Backend unit tests (workspace-wide):
-
-```sh
-cd src-tauri && cargo test
-```
-
-The backend enforces strict Clippy lints (`all` / `pedantic` / `nursery` / `cargo` denied by default with curated allows) — run `cargo clippy --workspace` before submitting PRs.
+The individual gates are listed in
+[`AGENTS.md`](AGENTS.md#commands); that list is generated from
+`scripts/gates.mjs`, which CI and `pnpm check:all` both read. A green subset is
+not a green build.
 
 ## Contributing
 
@@ -398,19 +464,29 @@ Contributions are what make the open-source community such a great place to lear
 4. Push to the branch: `git push origin feature/AmazingFeature`
 5. Open a Pull Request
 
-Please make sure `pnpm tsc --noEmit` and `cd src-tauri && cargo clippy --workspace && cargo test` pass before opening a PR.
+Read [CONTRIBUTING.md](./CONTRIBUTING.md) first: it lists the CLA terms, the IP checks your change must satisfy, and the full gate list (`pnpm check:all`).
 
 ## Versioning
 
-This project is managed with Git. Available releases can be found on the [Releases](https://github.com/horldsence/lissio/releases) page.
+This project is managed with Git. Available releases can be found on the [Releases](https://codeberg.org/Horldsence/Lissio/releases) page.
 
 ## License
 
-This project is licensed under GNU GPL v2 only — see [LICENSE](./LICENSE) for details.
+Lissio is licensed under the **Apache License, Version 2.0**; see
+[LICENSE](./LICENSE). Apache-2.0 permits commercial use, modification, and
+closed-source derivatives subject to its notice and attribution conditions.
+Copyright © 2026 Horldsence and Lissio contributors. Contributions are made
+under [CLA.md](./CLA.md). Historical GPL-only releases remain governed by the
+license supplied with those releases. Attribution and third-party obligations
+are maintained in [NOTICE](./NOTICE) and
+[docs/governance/third-party-licenses.md](docs/governance/third-party-licenses.md).
+
+Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md),
+[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) and [SECURITY.md](./SECURITY.md).
 
 ## Acknowledgements
 
-- [VOFA+](https://www.vofa.plus/) for the FireWater / JustFloat protocol references
+- [VOFA+](https://www.vofa.plus/) for the FireWater / JustFloat compatibility protocol references
 - [Tauri](https://tauri.app/)
 - [React Flow](https://reactflow.dev/)
 - [uPlot](https://github.com/leeoniya/uPlot)
@@ -421,13 +497,3 @@ This project is licensed under GNU GPL v2 only — see [LICENSE](./LICENSE) for 
 - [libautomotive](https://crates.io/crates/libautomotive)
 
 <!-- links -->
-[contributors-shield]: https://img.shields.io/github/contributors/horldsence/lissio.svg?style=flat-square
-[contributors-url]: https://github.com/horldsence/lissio/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/horldsence/lissio.svg?style=flat-square
-[forks-url]: https://github.com/horldsence/lissio/network/members
-[stars-shield]: https://img.shields.io/github/stars/horldsence/lissio.svg?style=flat-square
-[stars-url]: https://github.com/horldsence/lissio/stargazers
-[issues-shield]: https://img.shields.io/github/issues/horldsence/lissio.svg?style=flat-square
-[issues-url]: https://github.com/horldsence/lissio/issues
-[license-shield]: https://img.shields.io/github/license/horldsence/lissio.svg?style=flat-square
-[license-url]: https://github.com/horldsence/lissio/blob/master/LICENSE

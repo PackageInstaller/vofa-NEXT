@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { tauriMock } from '../../test/setup';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../settings/defaults';
-import { useSettingsStore } from '../settingsStore';
+import { toCleanupPolicy, useSettingsStore } from '../settingsStore';
+import type { RecordingCleanupPolicy } from '../../lib/tauri/tauri';
 
 const STORE_FILE = 'settings.json';
 const STORE_KEY = 'app';
@@ -11,6 +12,13 @@ function pipelineConfigCalls(): { config: Record<string, number | string> }[] {
   return (tauriMock.invoke.mock.calls as unknown as [string, ...unknown[]][])
     .filter(([cmd]) => cmd === 'set_pipeline_config')
     .map(([, args]) => args as { config: Record<string, number> });
+}
+
+/// 提取任意命令的调用参数
+function invokeCalls(cmd: string): Record<string, unknown>[] {
+  return (tauriMock.invoke.mock.calls as unknown as [string, ...unknown[]][])
+    .filter(([c]) => c === cmd)
+    .map(([, args]) => args as Record<string, unknown>);
 }
 
 describe('settingsStore', () => {
@@ -23,14 +31,17 @@ describe('settingsStore', () => {
       isAboutOpen: false,
       activeCategory: 'general',
       searchQuery: '',
-      loaded: false,
+      loaded: true,
+      loadError: null,
+      saveError: null,
+      saving: false,
       keychainPermissionPromptOpen: false,
       keychainPermissionRetrying: false,
       keychainPermissionRetryError: null,
     });
   });
 
-  it('loads persisted settings from the LazyStore and merges them over defaults', async () => {
+  it('loads persisted settings from the backend and merges them over defaults', async () => {
     tauriMock.seedFile(STORE_FILE, STORE_KEY, { general: { language: 'en' } });
 
     await useSettingsStore.getState().load();
@@ -50,6 +61,13 @@ describe('settingsStore', () => {
     expect(settings.appearance.uiFontSize).toBe(DEFAULT_SETTINGS.appearance.uiFontSize);
   });
 
+  it('keeps the recording database off until the user opts in', async () => {
+    await useSettingsStore.getState().load();
+
+    expect(DEFAULT_SETTINGS.data.recordingEnabled).toBe(false);
+    expect(useSettingsStore.getState().settings.data.recordingEnabled).toBe(false);
+  });
+
   it('toggles modal state and category via open/close slice actions', () => {
     useSettingsStore.getState().open('serial');
     expect(useSettingsStore.getState().isOpen).toBe(true);
@@ -60,6 +78,22 @@ describe('settingsStore', () => {
 
     useSettingsStore.getState().close();
     expect(useSettingsStore.getState().isOpen).toBe(false);
+  });
+
+  it('opens 设置 → AI → MCP directly, while a plain open returns to the first level', () => {
+    useSettingsStore.getState().openMcpSettings();
+    expect(useSettingsStore.getState()).toMatchObject({
+      isOpen: true,
+      activeCategory: 'ai',
+      searchQuery: '',
+      aiSection: 'mcp',
+    });
+
+    useSettingsStore.getState().setAiSection('plugins');
+    expect(useSettingsStore.getState().aiSection).toBe('plugins');
+
+    useSettingsStore.getState().open('ai');
+    expect(useSettingsStore.getState().aiSection).toBe('main');
   });
 
   it('pushes pipeline config on load (backend does not persist it)', async () => {
@@ -88,33 +122,247 @@ describe('settingsStore', () => {
     expect(useSettingsStore.getState().settings.performance.maxWorkers).toBe(12);
   });
 
-  it('migrates legacy manual pipeline knobs to automatic safety limits', async () => {
+  it('does not push pipeline config when a non-performance setting is updated', () => {
+    useSettingsStore.getState().update('notifications', 'duration', 3000);
+
+    expect(pipelineConfigCalls()).toHaveLength(0);
+  });
+
+  it('整窗透明度经 appearance 更新后写入 body 与 :root 变量', () => {
+    useSettingsStore.getState().update('appearance', 'windowOpacity', 0.5);
+
+    expect(useSettingsStore.getState().settings.appearance.windowOpacity).toBe(0.5);
+    expect(document.body.style.opacity).toBe('0.5');
+    expect(document.documentElement.style.getPropertyValue('--window-opacity')).toBe('0.5');
+  });
+
+  it('resetCategory(apppearance) 把整窗透明度还原为 1 并清除内联样式', () => {
+    useSettingsStore.getState().update('appearance', 'windowOpacity', 0.5);
+    expect(document.body.style.opacity).toBe('0.5');
+
+    useSettingsStore.getState().resetCategory('appearance');
+
+    expect(useSettingsStore.getState().settings.appearance.windowOpacity).toBe(1);
+    expect(document.body.style.opacity).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--window-opacity')).toBe('');
+  });
+
+  it('外观默认开启亚克力 (透明) 且整窗保持不透明', () => {
+    useSettingsStore.getState().resetCategory('appearance');
+    const appearance = useSettingsStore.getState().settings.appearance;
+
+    expect(appearance.acrylicBackground).toBe(true);
+    expect(appearance.acrylicOpacity).toBe(0.6);
+    expect(appearance.windowOpacity).toBe(1);
+    expect(document.documentElement.dataset.acrylic).toBe('true');
+  });
+
+  it('整窗透明度与亚克力开关相互独立', () => {
+    useSettingsStore.getState().update('appearance', 'acrylicBackground', true);
+    useSettingsStore.getState().update('appearance', 'windowOpacity', 0.7);
+
+    expect(useSettingsStore.getState().settings.appearance.acrylicBackground).toBe(true);
+    expect(useSettingsStore.getState().settings.appearance.windowOpacity).toBe(0.7);
+    expect(document.documentElement.dataset.acrylic).toBe('true');
+    expect(document.body.style.opacity).toBe('0.7');
+  });
+
+  it('二级卡片磨砂与亚克力背景相互独立', () => {
+    useSettingsStore.getState().update('appearance', 'acrylicBackground', true);
+    useSettingsStore.getState().update('appearance', 'floatingGlass', true);
+    useSettingsStore.getState().update('appearance', 'floatingGlassOpacity', 0.72);
+
+    expect(document.documentElement.dataset.acrylic).toBe('true');
+    expect(document.documentElement.dataset.floatingGlass).toBe('true');
+    expect(document.documentElement.style.getPropertyValue('--frost-alpha-floating')).toBe('72%');
+    expect(document.documentElement.style.getPropertyValue('--color-float-surface')).toBe('#1b1f26');
+    expect(document.documentElement.style.getPropertyValue('--color-bg-sidebar')).not.toBe('#1b1f26');
+  });
+
+  it('resetCategory(apppearance) 恢复二级卡片磨砂默认值', () => {
+    useSettingsStore.getState().update('appearance', 'floatingGlass', false);
+    useSettingsStore.getState().update('appearance', 'floatingGlassOpacity', 0.5);
+
+    useSettingsStore.getState().resetCategory('appearance');
+
+    expect(useSettingsStore.getState().settings.appearance.floatingGlass).toBe(true);
+    expect(useSettingsStore.getState().settings.appearance.floatingGlassOpacity).toBe(0.72);
+    expect(document.documentElement.dataset.floatingGlass).toBe('true');
+    expect(document.documentElement.style.getPropertyValue('--frost-alpha-floating')).toBe('72%');
+  });
+
+  it('replays recording storage settings and runs enabled cleanup rules on load', async () => {
     tauriMock.seedFile(STORE_FILE, STORE_KEY, {
-      performance: {
-        maxFeedWorkers: 2,
-        feedParallelUnit: 4,
-        minWorkerBytesKb: 16,
-        coalesceMaxMsgs: 8,
-        coalesceMaxBytesKb: 32,
-        maxStreamShards: 4,
-        parseChannelCap: 64,
+      data: {
+        recordingEnabled: true,
+        recordingDatabaseDir: '/tmp/rec-storage',
+        cleanupDeleteFailed: true,
       },
     });
 
     await useSettingsStore.getState().load();
 
-    expect(useSettingsStore.getState().settings.performance).toEqual(DEFAULT_SETTINGS.performance);
-    const saved = tauriMock.fileStore.get(STORE_FILE)?.get(STORE_KEY) as {
-      performance: Record<string, unknown>;
-    };
-    expect(saved.performance).toEqual(DEFAULT_SETTINGS.performance);
-    expect(saved.performance).not.toHaveProperty('maxStreamShards');
+    await vi.waitFor(() => {
+      expect(invokeCalls('apply_recording_settings')).toHaveLength(1);
+    });
+    expect(invokeCalls('apply_recording_settings')[0]).toEqual({
+      databaseDir: '/tmp/rec-storage',
+      continueEmptySession: true,
+      enabled: true,
+    });
+    await vi.waitFor(() => {
+      expect(invokeCalls('cleanup_recording_sessions')).toHaveLength(1);
+    });
+    const policy = (
+      invokeCalls('cleanup_recording_sessions')[0] as { policy: RecordingCleanupPolicy }
+    ).policy;
+    expect(policy.delete_failed).toBe(true);
+    expect(policy.delete_stopped).toBe(false);
+    expect(policy.older_than_us).toBeNull();
+    expect(policy.keep_latest).toBeNull();
   });
 
-  it('does not push pipeline config when a non-performance setting is updated', () => {
-    useSettingsStore.getState().update('notifications', 'duration', 3000);
+  it('skips the cleanup invocation when no rule is enabled', async () => {
+    // 默认总开关已关; 本用例验的是「录制开启但没有清理规则」, 显式置为开启
+    tauriMock.seedFile(STORE_FILE, STORE_KEY, { data: { recordingEnabled: true } });
 
-    expect(pipelineConfigCalls()).toHaveLength(0);
+    await useSettingsStore.getState().load();
+
+    await vi.waitFor(() => {
+      expect(invokeCalls('apply_recording_settings')).toHaveLength(1);
+    });
+    expect(invokeCalls('apply_recording_settings')[0]).toEqual({
+      databaseDir: '',
+      continueEmptySession: true,
+      enabled: true,
+    });
+    expect(invokeCalls('cleanup_recording_sessions')).toHaveLength(0);
+  });
+
+  it('关闭录制数据库时只推开关, 不做必然失败的清理', async () => {
+    tauriMock.seedFile(STORE_FILE, STORE_KEY, {
+      data: {
+        recordingEnabled: false,
+        cleanupDeleteFailed: true,
+        cleanupKeepLatest: 5,
+      },
+    });
+
+    await useSettingsStore.getState().load();
+
+    await vi.waitFor(() => {
+      expect(invokeCalls('apply_recording_settings')).toHaveLength(1);
+    });
+    expect(invokeCalls('apply_recording_settings')[0]).toEqual({
+      databaseDir: '',
+      continueEmptySession: true,
+      enabled: false,
+    });
+    // 没有连接可用, 清理必然失败: 必须直接跳过
+    expect(invokeCalls('cleanup_recording_sessions')).toHaveLength(0);
+  });
+
+  it('debounces recording side effects while cleanup numbers are edited', async () => {
+    vi.useFakeTimers();
+    try {
+      // 清理只在录制开启时推送 — 本用例验证防抖, 先把总开关置于开启态
+      useSettingsStore.setState({
+        settings: {
+          ...DEFAULT_SETTINGS,
+          data: { ...DEFAULT_SETTINGS.data, recordingEnabled: true },
+        },
+      });
+      useSettingsStore.getState().update('data', 'cleanupDeleteFailed', true);
+      useSettingsStore.getState().update('data', 'cleanupKeepLatest', 5);
+      expect(invokeCalls('apply_recording_settings')).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(800);
+
+      expect(invokeCalls('apply_recording_settings')).toHaveLength(1);
+      const policy = (
+        invokeCalls('cleanup_recording_sessions')[0] as { policy: RecordingCleanupPolicy }
+      ).policy;
+      expect(policy.delete_failed).toBe(true);
+      expect(policy.keep_latest).toBe(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('maps cleanup settings to a backend policy (days → us cutoff, 0 = off)', () => {
+    const enabled = toCleanupPolicy({
+      ...DEFAULT_SETTINGS.data,
+      cleanupDeleteStopped: true,
+      cleanupOlderThanDays: 7,
+      cleanupKeepLatest: 10,
+    });
+    expect(enabled.delete_stopped).toBe(true);
+    expect(enabled.keep_latest).toBe(10);
+    const beforeUs = (Date.now() - 7 * 86_400_000) * 1000;
+    expect(enabled.older_than_us).toBeGreaterThanOrEqual(beforeUs - 2000);
+    expect(enabled.older_than_us).toBeLessThan(Date.now() * 1000 + 2000);
+
+    const off = toCleanupPolicy(DEFAULT_SETTINGS.data);
+    expect(off.delete_failed).toBe(false);
+    expect(off.older_than_us).toBeNull();
+    expect(off.keep_latest).toBeNull();
+  });
+
+  it('把历史默认 UI 字体栈迁移到当前默认 (旧栈让中文落到 Maple Mono)', async () => {
+    tauriMock.seedFile(STORE_FILE, STORE_KEY, {
+      appearance: {
+        uiFontFamily:
+          "'JetBrainsMono Nerd Font Mono', 'GoMono Nerd Font Mono', 'Clear Han Serif', 'Maple Mono CN', 'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+      },
+    });
+
+    await useSettingsStore.getState().load();
+
+    const { uiFontFamily } = useSettingsStore.getState().settings.appearance;
+    expect(uiFontFamily).toBe(DEFAULT_SETTINGS.appearance.uiFontFamily);
+    expect(uiFontFamily).toContain('MiSans');
+    expect(uiFontFamily).not.toContain('Maple Mono CN');
+  });
+
+  it('把上一版默认字体栈 (FiraCode/GoMono 内置族) 迁移到当前默认', async () => {
+    // 上一版默认值 — 这两个字体族已随内嵌与许可一并移除, 存档必须升级
+    const previousDefaults = {
+      uiFontFamily:
+        "'FiraCode Nerd Font Mono', 'GoMono Nerd Font Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'MiSans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', 'WenQuanYi Micro Hei', sans-serif",
+      monoFontFamily:
+        "'FiraCode Nerd Font Mono', 'GoMono Nerd Font Mono', 'Maple Mono CN', 'JetBrains Mono', 'Cascadia Code', 'SF Mono', Menlo, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', 'WenQuanYi Micro Hei', monospace",
+    };
+    tauriMock.seedFile(STORE_FILE, STORE_KEY, { appearance: { ...previousDefaults } });
+    expect(previousDefaults.uiFontFamily).not.toBe(DEFAULT_SETTINGS.appearance.uiFontFamily);
+
+    await useSettingsStore.getState().load();
+
+    const { uiFontFamily, monoFontFamily } = useSettingsStore.getState().settings.appearance;
+    expect(uiFontFamily).toBe(DEFAULT_SETTINGS.appearance.uiFontFamily);
+    expect(monoFontFamily).toBe(DEFAULT_SETTINGS.appearance.monoFontFamily);
+    expect(monoFontFamily).not.toContain('Nerd Font');
+  });
+
+  it('迁移结果立即落盘, 不必每次启动重复改写', async () => {
+    tauriMock.seedFile(STORE_FILE, STORE_KEY, {
+      appearance: { monoFontFamily: "'Cascadia Code', 'Fira Code', 'SF Mono', Menlo, monospace" },
+    });
+
+    await useSettingsStore.getState().load();
+
+    await vi.waitFor(() => {
+      const saved = tauriMock.fileStore.get(STORE_FILE)?.get(STORE_KEY) as AppSettings;
+      expect(saved.appearance.monoFontFamily).toBe(DEFAULT_SETTINGS.appearance.monoFontFamily);
+    });
+  });
+
+  it('保留用户自定义的字体栈, 不做迁移', async () => {
+    const custom = "'My Custom Font', monospace";
+    tauriMock.seedFile(STORE_FILE, STORE_KEY, { appearance: { uiFontFamily: custom } });
+
+    await useSettingsStore.getState().load();
+
+    expect(useSettingsStore.getState().settings.appearance.uiFontFamily).toBe(custom);
   });
 });
 
@@ -124,7 +372,10 @@ describe('settingsStore API key 钥匙串集成', () => {
     vi.clearAllMocks();
     useSettingsStore.setState({
       settings: DEFAULT_SETTINGS,
-      loaded: false,
+      loaded: true,
+      loadError: null,
+      saveError: null,
+      saving: false,
       keychainPermissionPromptOpen: false,
       keychainPermissionRetrying: false,
       keychainPermissionRetryError: null,
@@ -138,25 +389,17 @@ describe('settingsStore API key 钥匙串集成', () => {
       .map((a) => [a.adapter, a.key ?? '']);
   }
 
-  it('load 时从钥匙串水合当前适配器的 API key', async () => {
+  it('load 时只读取密钥状态，不把明文水合到前端', async () => {
     tauriMock.seedFile(STORE_FILE, STORE_KEY, {});
     (tauriMock.invoke as unknown as { mockImplementation: (f: (cmd: string) => unknown) => void })
-      .mockImplementation((cmd: string) => Promise.resolve(cmd === 'ai_keychain_get' ? 'sk-stored' : undefined));
+      .mockImplementation((cmd: string) => Promise.resolve(cmd === 'ai_secret_status'
+        ? { configured: true, source: 'keyring', writable: true }
+        : undefined));
 
     await useSettingsStore.getState().load();
 
-    expect(useSettingsStore.getState().settings.ai.apiKey).toBe('sk-stored');
-  });
-
-  it('旧版明文 key 自动迁入钥匙串 (仅当钥匙串为空)', async () => {
-    tauriMock.seedFile(STORE_FILE, STORE_KEY, { ai: { apiKey: 'sk-legacy' } });
-    (tauriMock.invoke as unknown as { mockImplementation: (f: (cmd: string) => unknown) => void })
-      .mockImplementation((cmd: string) => Promise.resolve(cmd === 'ai_keychain_get' ? null : undefined));
-
-    await useSettingsStore.getState().load();
-
-    expect(keychainCalls('ai_keychain_set')).toContainEqual(['orcarouter', 'sk-legacy']);
-    expect(useSettingsStore.getState().settings.ai.apiKey).toBe('sk-legacy');
+    expect(useSettingsStore.getState().settings.ai.apiKey).toBe('');
+    expect(keychainCalls('ai_secret_status')).toContainEqual(['orcarouter', '']);
   });
 
   it('持久化剥离 API key — settings.json 恒为空串', async () => {
@@ -171,19 +414,21 @@ describe('settingsStore API key 钥匙串集成', () => {
       const saved = tauriMock.fileStore.get(STORE_FILE)?.get(STORE_KEY) as { ai?: { apiKey?: string } } | undefined;
       expect(saved?.ai?.apiKey).toBe('');
     });
-    // 内存中保留真实值 (随请求传给后端)
+    // 编辑控件可暂存本次输入，但对话请求不会携带它。
     expect(useSettingsStore.getState().settings.ai.apiKey).toBe('sk-secret');
   });
 
-  it('update apiKey 写入钥匙串; 切换适配器水合对应密钥', () => {
+  it('update apiKey 覆盖 SecretStore；切换适配器只读取状态并清空输入', () => {
     useSettingsStore.getState().update('ai', 'apiKey', 'sk-new');
-    expect(keychainCalls('ai_keychain_set')).toContainEqual(['orcarouter', 'sk-new']);
+    expect(keychainCalls('ai_secret_set')).toContainEqual(['orcarouter', 'sk-new']);
 
     (tauriMock.invoke as unknown as { mockImplementation: (f: (cmd: string) => unknown) => void })
-      .mockImplementation((cmd: string) => Promise.resolve(cmd === 'ai_keychain_get' ? 'sk-deepseek' : undefined));
+      .mockImplementation((cmd: string) => Promise.resolve(cmd === 'ai_secret_status'
+        ? { configured: true, source: 'environment', writable: true }
+        : undefined));
     useSettingsStore.getState().update('ai', 'adapter', 'deepseek');
     return vi.waitFor(() => {
-      expect(useSettingsStore.getState().settings.ai.apiKey).toBe('sk-deepseek');
+      expect(useSettingsStore.getState().settings.ai.apiKey).toBe('');
     });
   });
 
@@ -191,7 +436,7 @@ describe('settingsStore API key 钥匙串集成', () => {
     (tauriMock.invoke as unknown as {
       mockImplementation: (f: (cmd: string) => unknown) => void;
     }).mockImplementation((cmd: string) => {
-      if (cmd === 'ai_keychain_get') {
+      if (cmd === 'ai_secret_status') {
         return Promise.reject(Object.assign(new Error('cancelled'), { kind: 'AiKeyringAccessDenied', data: {} }));
       }
       return Promise.resolve(undefined);
@@ -207,7 +452,7 @@ describe('settingsStore API key 钥匙串集成', () => {
     (tauriMock.invoke as unknown as {
       mockImplementation: (f: (cmd: string) => unknown) => void;
     }).mockImplementation((cmd: string) => {
-      if (cmd === 'ai_keychain_get') {
+      if (cmd === 'ai_secret_status') {
         return Promise.reject(Object.assign(new Error('locked'), { kind: 'AiKeyring', data: {} }));
       }
       return Promise.resolve(undefined);
@@ -225,7 +470,7 @@ describe('settingsStore API key 钥匙串集成', () => {
     (tauriMock.invoke as unknown as {
       mockImplementation: (f: (cmd: string) => unknown) => void;
     }).mockImplementation((cmd: string) => {
-      if (cmd === 'ai_keychain_get') {
+      if (cmd === 'ai_secret_status') {
         return Promise.reject(Object.assign(new Error('cancelled'), { kind: 'AiKeyringAccessDenied', data: {} }));
       }
       return Promise.resolve(undefined);
@@ -236,17 +481,19 @@ describe('settingsStore API key 钥匙串集成', () => {
     expect(useSettingsStore.getState().keychainPermissionPromptOpen).toBe(false);
   });
 
-  it('再次请求成功后水合密钥并关闭提醒', async () => {
+  it('再次请求成功后确认状态并关闭提醒，仍不读回密钥', async () => {
     useSettingsStore.setState({ keychainPermissionPromptOpen: true });
     (tauriMock.invoke as unknown as {
       mockImplementation: (f: (cmd: string) => unknown) => void;
     }).mockImplementation((cmd: string) =>
-      Promise.resolve(cmd === 'ai_keychain_get' ? 'sk-restored' : undefined)
+      Promise.resolve(cmd === 'ai_secret_status'
+        ? { configured: true, source: 'keyring', writable: true }
+        : undefined)
     );
 
     await useSettingsStore.getState().retryKeychainPermission();
 
-    expect(useSettingsStore.getState().settings.ai.apiKey).toBe('sk-restored');
+    expect(useSettingsStore.getState().settings.ai.apiKey).toBe('');
     expect(useSettingsStore.getState().keychainPermissionPromptOpen).toBe(false);
     expect(useSettingsStore.getState().keychainPermissionRetryError).toBeNull();
   });
@@ -256,7 +503,7 @@ describe('settingsStore API key 钥匙串集成', () => {
     (tauriMock.invoke as unknown as {
       mockImplementation: (f: (cmd: string) => unknown) => void;
     }).mockImplementation((cmd: string) => {
-      if (cmd === 'ai_keychain_get') {
+      if (cmd === 'ai_secret_status') {
         return Promise.reject(Object.assign(new Error('cancelled'), { kind: 'AiKeyringAccessDenied', data: {} }));
       }
       return Promise.resolve(undefined);

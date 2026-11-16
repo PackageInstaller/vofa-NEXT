@@ -1,26 +1,30 @@
-import type { JsonSchema } from '../../types';
+import type { JsonValue } from '../../types/generated/serde_json/JsonValue';
 import { useAppStore } from '../../store/appStore';
-import { t } from '../../i18n';
-import { defaultsFromSchema } from '../../lib/acquisition/schemaForm';
+import { translate } from '../../i18n';
+import { DraftInput, DraftNumberInput } from '../ui/fields';
+import { asFormSchema, defaultsFromSchema } from '../../lib/acquisition/schemaForm';
+import { schemaEnumLabel, schemaFieldLabel } from './schemaLabels';
 
 interface SchemaFieldsProps {
-  schema: JsonSchema;
+  /// wire 上的 jsonSchema (JsonValue); 内部收窄为表单支持的子集
+  schema: JsonValue;
   value: unknown;
   onChange: (value: unknown) => void;
   path?: string;
-  uiHints?: Record<string, Record<string, unknown>>;
+  /// wire 上的 uiHints (JsonValue); 内部收窄为对象视图
+  uiHints?: JsonValue;
   disabled?: boolean;
 }
 
-export function SchemaFields({
-  schema,
-  value,
-  onChange,
-  path = '$',
-  uiHints,
-  disabled = false,
-}: SchemaFieldsProps) {
+export function SchemaFields(props: SchemaFieldsProps) {
+  const { value, onChange, path = '$', disabled = false } = props;
   const lang = useAppStore((state) => state.lang);
+  const schema = asFormSchema(props.schema);
+  const uiHints = asHints(props.uiHints);
+  if (!schema) {
+    // schema 不是本项目支持的表单子集 — 显式提示, 不假装校验成功
+    return <p className="text-[11px] text-warning">{translate('schemaUnsupported', lang)}</p>;
+  }
   if (schema.type === 'object') {
     const object = asObject(value);
     const entries = Object.entries(schema.properties ?? {}).sort(([left], [right]) => {
@@ -32,9 +36,9 @@ export function SchemaFields({
       <div className="flex flex-col gap-2">
         {entries.map(([name, child]) => (
           <div key={`${path}.${name}`} className="block text-[11px] text-text-secondary">
-            <label htmlFor={`${path}.${name}`} className="block mb-1 text-text-secondary">{child.title ?? formatLabel(name)}</label>
+            <label htmlFor={`${path}.${name}`} className="block mb-1 text-text-secondary">{child.title ?? schemaFieldLabel(lang, name) ?? formatLabel(name)}</label>
             <SchemaFields
-              schema={child}
+              schema={child as JsonValue}
               value={object[name]}
               onChange={(next) => onChange({ ...object, [name]: next })}
               path={`${path}.${name}`}
@@ -53,7 +57,7 @@ export function SchemaFields({
         {items.map((item, index) => (
           <div key={`${path}.${index}`} className="rounded border border-border-subtle p-2">
             <SchemaFields
-              schema={schema.items ?? { type: 'string' }}
+              schema={(schema.items ?? { type: 'string' }) as JsonValue}
               value={item}
               onChange={(next) => onChange(items.map((current, itemIndex) => itemIndex === index ? next : current))}
               path={`${path}[${index}]`}
@@ -65,7 +69,7 @@ export function SchemaFields({
               disabled={disabled}
               onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
             >
-              {t(lang, 'removeWidget')}
+              {translate('removeWidget', lang)}
             </button>
           </div>
         ))}
@@ -75,27 +79,36 @@ export function SchemaFields({
           disabled={disabled}
           onClick={() => onChange([...items, defaultsFromSchema(schema.items ?? { type: 'string' })])}
         >
-          + {t(lang, 'addConnection')}
+          + {translate('addConnection', lang)}
         </button>
       </div>
     );
   }
 
   if (schema.enum) {
+    // 当前值不在候选里 (配置缺字段/形状不符) 时**显式**渲染未设置项:
+    // 否则浏览器静默回落到第一个 option — 用户看到的值与真实配置不符,
+    // 且「选中当前显示值」不触发 change (必须先选别的再选回来)。
+    const current = optionText(value);
+    const matched = schema.enum.some((candidate) => optionText(candidate) === current);
     return (
       <select
         id={path}
         className="form-select"
         disabled={disabled}
-        value={optionText(value)}
+        value={matched ? current : ''}
         onChange={(event) => {
           const selected = schema.enum?.find((candidate) => optionText(candidate) === event.target.value);
           onChange(selected);
         }}
       >
-        {schema.enum.map((option) => (
-          <option key={optionText(option)} value={optionText(option)}>{optionText(option)}</option>
-        ))}
+        {!matched && (
+          <option value="" disabled>{translate('schemaValueUnset', lang)}</option>
+        )}
+        {schema.enum.map((option) => {
+          const raw = optionText(option);
+          return <option key={raw} value={raw}>{schemaEnumLabel(lang, raw) ?? raw}</option>;
+        })}
       </select>
     );
   }
@@ -114,30 +127,44 @@ export function SchemaFields({
 
   if (schema.type === 'integer' || schema.type === 'number') {
     return (
-      <input
+      <DraftNumberInput
         id={path}
         className="form-input"
-        type="number"
         disabled={disabled}
         step={schema.type === 'integer' ? 1 : 'any'}
+        integer={schema.type === 'integer'}
         min={schema.minimum}
         max={schema.maximum}
-        value={typeof value === 'number' ? value : ''}
-        onChange={(event) => onChange(event.target.value === '' ? 0 : Number(event.target.value))}
+        value={typeof value === 'number' ? value : null}
+        // 配置缺该字段时输入框为空 — 用 schema 默认值做占位提示, 不静默写入
+        placeholder={scalarPlaceholder(schema.default)}
+        onCommit={onChange}
       />
     );
   }
 
   return (
-    <input
+    <DraftInput
       id={path}
-      className="form-input"
       type="text"
+      className="form-input"
       disabled={disabled}
       value={typeof value === 'string' ? value : ''}
-      onChange={(event) => onChange(event.target.value)}
+      placeholder={scalarPlaceholder(schema.default)}
+      onCommit={onChange}
     />
   );
+}
+
+/// schema 默认值的占位提示 — 仅标量有意义 (对象/数组/空值返回 undefined)
+function scalarPlaceholder(value: JsonValue | undefined): string | undefined {
+  if (value == null || typeof value === 'object') return undefined;
+  return String(value);
+}
+
+function asHints(value: JsonValue | undefined): Record<string, Record<string, unknown>> | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return value as Record<string, Record<string, unknown>>;
 }
 
 function asObject(value: unknown): Record<string, unknown> {

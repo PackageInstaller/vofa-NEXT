@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// 匹配类型 — 与前端 `TriggerMatchType` 对齐
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum TriggerMatchType {
     Exact,
@@ -15,14 +15,14 @@ pub enum TriggerMatchType {
 }
 
 /// 单条匹配规则 — 与前端 `TriggerRule` 对齐
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, ts_rs::TS)]
 pub struct TriggerRuleDef {
     pub id: String,
     pub pattern: String,
     pub match_type: TriggerMatchType,
     #[serde(default)]
     pub flags: Option<String>,
-    /// 输出值类型: 'number' | 'string' (默认 'number', 兼容旧配置)
+    /// 输出值类型: 'number' | 'string' (默认 'number')
     #[serde(default = "default_output_type")]
     pub output_type: String,
     /// 数字输出值 (output_type='number' 时使用)
@@ -39,7 +39,7 @@ fn default_output_type() -> String {
 }
 
 /// 匹配结果 — 返回前端 (camelCase, 对齐前端 TriggerMatchResult 类型)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TriggerMatchResult {
     pub value: f32,

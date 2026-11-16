@@ -2,7 +2,8 @@ import { memo } from 'react';
 import type { WidgetConfig } from '../../../types';
 import { useAppStore } from '../../../store/appStore';
 import { useNumericInput } from '../../../lib/hooks/useNumericPort';
-import { t } from '../../../i18n';
+import { translate } from '../../../i18n';
+import { formatFreq } from '../../../lib/utils/format';
 
 interface FFTWidgetProps {
   widget: Extract<WidgetConfig, { kind: 'FFT' }>;
@@ -46,7 +47,7 @@ export const FFTWidget = memo(function FFTWidget({ widget }: FFTWidgetProps) {
           </span>
         ) : (
           <span className="text-[11px] text-text-secondary font-mono py-0.5">
-            {t(lang, 'spectrumWaiting')}
+            {translate('spectrumWaiting', lang)}
           </span>
         )}
       </div>
@@ -59,8 +60,3 @@ export const FFTWidget = memo(function FFTWidget({ widget }: FFTWidgetProps) {
 });
 
 /// 格式化频率 (Hz / kHz)
-function formatFreq(hz: number): string {
-  if (hz >= 1000) return (hz / 1000).toFixed(1) + 'kHz';
-  if (hz >= 1) return hz.toFixed(1) + 'Hz';
-  return hz.toFixed(2) + 'Hz';
-}

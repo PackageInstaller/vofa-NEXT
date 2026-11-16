@@ -5,12 +5,12 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
-use data_model::Result;
+use error::Result;
 use error::{AiError, Error as _};
 use futures::{Stream, StreamExt};
 use llm::{
-    chat_turn_stream, validate_config, AiProviderConfig, ChatMessageDto, ChatRoleDto,
-    ChatTurnOutcome, ProviderEvent, ToolCallDto, ToolSpecDto,
+    AiProviderConfig, ChatMessageDto, ChatRoleDto, ChatTurnOutcome, ProviderEvent, ToolCallDto,
+    ToolSpecDto, chat_turn_stream, validate_config,
 };
 use parking_lot::Mutex;
 use serde_json::Value;
@@ -28,8 +28,6 @@ pub struct ChatPayload {
     pub system: Option<String>,
     /// 完整对话历史 (前端持有,含上一轮工具调用与回填)。
     pub messages: Vec<ChatMessageDto>,
-    /// 工具循环最大轮次保护。
-    pub max_tool_rounds: u32,
 }
 
 /// LLM 单轮流式回合的抽象 — 生产实现走 genai,测试可 mock。
@@ -142,8 +140,8 @@ fn tool_message(call: &ToolCallDto, content: String) -> ChatMessageDto {
     }
 }
 
-/// `data_model::Error` → 终止事件 — kind 与结构化字段随事件下发, 供前端本地化。
-fn error_event(e: &data_model::Error) -> AiChatEvent {
+/// `error::AppError` → 终止事件 — kind 与结构化字段随事件下发, 供前端本地化。
+fn error_event(e: &error::AppError) -> AiChatEvent {
     AiChatEvent::Error {
         message: e.to_string(),
         kind: e.kind().to_string(),
@@ -199,9 +197,8 @@ async fn collect_turn(
 
 /// 执行一次完整对话 (可含多轮工具调用),事件实时回调。
 ///
-/// 正常结束 (本轮无工具调用) 返回 `Ok(rounds)`;工具循环耗尽返回
-/// [`AiError::MaxToolRounds`];取消返回 [`AiError::Cancelled`] —
-/// 取消与循环耗尽已先回调对应事件。
+/// 正常结束 (本轮无工具调用) 返回 `Ok(rounds)`；取消返回
+/// [`AiError::Cancelled`] 并先回调取消事件。
 ///
 /// # Errors
 /// 见 [`AiError`] 各变体。
@@ -214,12 +211,11 @@ pub async fn run_chat(
 ) -> Result<u32> {
     validate_config(&payload.config)?;
 
-    let max_rounds = payload.max_tool_rounds.max(1);
     let mut history = payload.messages;
     let mut rounds: u32 = 0;
 
-    for _ in 0..max_rounds {
-        rounds += 1;
+    loop {
+        rounds = rounds.saturating_add(1);
         let stream = provider
             .chat_turn(
                 &payload.config,
@@ -272,8 +268,4 @@ pub async fn run_chat(
             }
         }
     }
-
-    let err = AiError::MaxToolRounds { rounds }.into();
-    on_event(error_event(&err));
-    Err(err)
 }

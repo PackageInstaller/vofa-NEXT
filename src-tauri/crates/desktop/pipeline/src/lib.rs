@@ -33,29 +33,34 @@ pub mod graph_eval;
 pub mod graph_eval_parallel;
 pub mod run_control;
 pub mod runtime;
+pub use runtime::{
+    SourceGraphs, SourceNodeHint, TabSourceGraph, WidgetRecord, create_engine,
+    resolve_widget_inputs, send_scheduler_ticker, spectrum_ticker, text_output_ticker,
+    textout_sender_ticker,
+};
 
 pub use data_plane::byte_router::RouteSummary;
 pub use data_plane::{
-    byte_router, frame_dispatch, read_task, reconcile, DataPlaneMetrics, DataPlaneState,
-    ProtocolNodeState, METRICS_REPORT_INTERVAL, STATS_THROTTLE_MS,
+    DataPlaneMetrics, DataPlaneState, METRICS_REPORT_INTERVAL, ProtocolNodeState,
+    STATS_THROTTLE_MS, byte_router, frame_dispatch, read_task, reconcile,
 };
 pub use decoder_feed::{
-    ensure_decoder, feed_decoder_by_id, feed_one_decoder, sync_decoders_now, DecoderFeedCache,
-    DecoderParseConfig,
+    DecoderFeedCache, DecoderParseConfig, ensure_decoder, feed_decoder_by_id, feed_one_decoder,
+    sync_decoders_now,
 };
 pub use eval_state::{
-    build_graph_eval_state, CustomInputBatch, GraphEvalState, GraphOutputSnapshot, SpectrumBatch,
-    StreamGroupState, StringOutputSnapshot, DEFAULT_CAN_BUFFER_CAPACITY,
-    DEFAULT_CAN_LOAD_STATS_WINDOW, DEFAULT_DECODED_BUFFER_CAPACITY, DEFAULT_LOGIC_BUFFER_CAPACITY,
+    CustomInputBatch, DEFAULT_CAN_BUFFER_CAPACITY, DEFAULT_CAN_LOAD_STATS_WINDOW,
+    DEFAULT_DECODED_BUFFER_CAPACITY, DEFAULT_LOGIC_BUFFER_CAPACITY, GraphEvalState,
+    GraphOutputSnapshot, SpectrumBatch, StreamGroupState, StringOutputSnapshot,
+    build_graph_eval_state,
 };
 pub use execution::{
     RunAction, RunSnapshot, RunState, SendMode, SendScheduler, SendStatus, SendTask, SendTaskState,
 };
 pub use feed_parallel::{
-    workers_needed, ParallelFeeder, ParallelTiming, FEED_PARALLEL_UNIT, MAX_FEED_WORKERS,
-    MIN_WORKER_BYTES,
+    FEED_PARALLEL_UNIT, MAX_FEED_WORKERS, MIN_WORKER_BYTES, ParallelFeeder, ParallelTiming,
+    workers_needed,
 };
-pub use graph_eval::{evaluate_snapshot_now, process_source_batch, EvalBreakdown};
-pub use run_control::{apply_run_action, StreamGroups};
-pub use runtime::*;
+pub use graph_eval::{EvalBreakdown, evaluate_snapshot_now, process_source_batch};
+pub use run_control::{StreamGroups, apply_run_action};
 pub mod point_projection;

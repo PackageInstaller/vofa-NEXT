@@ -6,13 +6,15 @@ use std::sync::Mutex;
 use tauri::Emitter;
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-/// stable 通道 manifest: 最新正式 release 的 latest.json。
+/// stable 通道 manifest: 滚动 tag `stable` 上的 latest.json。
+/// Codeberg 不实现 GitHub 的 `releases/latest/download/...` 伪路径 (实测 404),
+/// 因此两个通道都以固定 tag 名作为 URL, 资产由 release CI 每次发布时覆盖。
 const STABLE_MANIFEST: &str =
-    "https://github.com/Horldsence/lissio/releases/latest/download/latest.json";
+    "https://codeberg.org/Horldsence/Lissio/releases/download/stable/latest.json";
 
 /// beta 通道 manifest: 滚动 tag `beta` 上的 beta-latest.json (release CI 维护)。
 const BETA_MANIFEST: &str =
-    "https://github.com/Horldsence/lissio/releases/download/beta/beta-latest.json";
+    "https://codeberg.org/Horldsence/Lissio/releases/download/beta/beta-latest.json";
 
 /// 更新通道: 稳定版跟踪正式 release, 测试版同时跟踪 prerelease。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -31,6 +33,11 @@ pub struct CheckUpdateResult {
     pub version: Option<String>,
     pub notes: Option<String>,
     pub date: Option<String>,
+    /// 远程配置入口: 发布方要求本次启动显示配置引导。
+    ///
+    /// 恒为 `None` —— manifest 里的对应字段还没定义, 前端按"缺省 = 不要求"处理。字段先
+    /// 留在这里, 将来接入时只需在下面的响应装配处填值, 命令契约与前端调用点都不变。
+    pub config_guide: Option<bool>,
 }
 
 /// 暂存已检测到、等待用户确认下载的更新。
@@ -66,6 +73,7 @@ pub async fn check_update(
         version: None,
         notes: None,
         date: None,
+        config_guide: None,
     };
 
     // 以通道对应的静态 manifest 为 endpoint, 交给 updater 插件做版本比较
@@ -94,6 +102,7 @@ pub async fn check_update(
             version: Some(update.version.trim_start_matches('v').to_string()),
             notes: update.body.clone(),
             date: update.date.map(|d| d.to_string()),
+            config_guide: None,
         };
         *pending
             .0
@@ -146,32 +155,5 @@ pub async fn download_and_install_update(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stable_channel_uses_latest_release_manifest() {
-        assert_eq!(
-            manifest_url(Channel::Stable),
-            "https://github.com/Horldsence/lissio/releases/latest/download/latest.json"
-        );
-    }
-
-    #[test]
-    fn beta_channel_uses_rolling_beta_tag_manifest() {
-        assert_eq!(
-            manifest_url(Channel::Beta),
-            "https://github.com/Horldsence/lissio/releases/download/beta/beta-latest.json"
-        );
-    }
-
-    #[test]
-    fn manifests_are_valid_urls_and_never_hit_github_api() {
-        // 回归保护: manifest 必须走 release 资产服务, 不得回到 api.github.com
-        // (未认证限额 60 次/小时/IP, 超额 403)
-        for url in [STABLE_MANIFEST, BETA_MANIFEST] {
-            let parsed = reqwest::Url::parse(url).expect("manifest 必须是合法 URL");
-            assert_ne!(parsed.host_str(), Some("api.github.com"));
-        }
-    }
-}
+#[path = "update_tests.rs"]
+mod tests;
