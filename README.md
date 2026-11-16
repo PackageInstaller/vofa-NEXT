@@ -7,6 +7,10 @@ last-reviewed: 2026-10-15
 applies-to: Product overview, setup, development, and distribution
 -->
 
+> This repository exists solely as a GitHub mirror of [Lissio’s `main` branch on Codeberg](https://codeberg.org/lissio-industries/Lissio/src/branch/main).
+>
+> [Official Lissio account on Bilibili](https://space.bilibili.com/479304379)
+
 All repository documentation is English. Historical review records and product
 localization resources are the only non-English surfaces.
 
